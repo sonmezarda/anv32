@@ -1,14 +1,17 @@
 // ============================================================================
 // anv32_decoder.sv
-// RV32I decode stage. RAW 32-bit instruction -> dinstr_t.
+// RV32I (+ optional RV32M) decode stage. Raw 32-bit instruction -> dinstr_t.
+// Shared across core variants; HAS_M selects M-extension decode.
 // ============================================================================
 module anv32_decoder
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
-(
-    input  logic [31:0]     instr_i,   // raw instruction (from memory)
-    input  logic [XLEN-1:0] pc_i,      // address of instruction (mem addr)
-    input  logic [31:0]     id_i,      // commit-log/diff order no
+#(
+    parameter bit HAS_M = 1'b0   // 1 -> decode RV32M (MUL/DIV); 0 -> base RV32I
+)(
+    input  logic [XLEN-1:0] instr_i,   // raw instruction (from memory)
+    input  logic [XLEN-1:0] pc_i,      // address of this instruction
+    input  logic [XLEN-1:0] id_i,      // commit-log/diff order no (debug)
     output dinstr_t         dinstr_o
 );
 
@@ -25,7 +28,7 @@ module anv32_decoder
         rs2    = instr_i[24:20];
         funct7 = instr_i[31:25];
 
-        // --- Default: full 0 ----------
+        // --- Default: full 0, then build up ---
         dinstr_o         = '0;
         dinstr_o.pc      = pc_i;
         dinstr_o.id      = id_i;
@@ -73,7 +76,7 @@ module anv32_decoder
                     F3_BGE:  begin dinstr_o.valid = 1'b1; dinstr_o.op = BGE;  end
                     F3_BLTU: begin dinstr_o.valid = 1'b1; dinstr_o.op = BLTU; end
                     F3_BGEU: begin dinstr_o.valid = 1'b1; dinstr_o.op = BGEU; end
-                    default: ; // valid is 0 if illegal
+                    default: ; // illegal -> valid stays 0
                 endcase
                 if (dinstr_o.valid) begin
                     dinstr_o.rs1_valid = 1'b1;
@@ -117,18 +120,18 @@ module anv32_decoder
             // ---- OP-IMM (register-immediate) -------------------------------
             OPC_OPIMM: begin
                 unique case (funct3)
-                    F3_ADDSUB: begin dinstr_o.valid = 1'b1; dinstr_o.op = ADDI;   end
-                    F3_SLT:    begin dinstr_o.valid = 1'b1; dinstr_o.op = SLTI;   end
-                    F3_SLTU:   begin dinstr_o.valid = 1'b1; dinstr_o.op = SLTIU;  end
-                    F3_XOR:    begin dinstr_o.valid = 1'b1; dinstr_o.op = XORI;   end
-                    F3_OR:     begin dinstr_o.valid = 1'b1; dinstr_o.op = ORI;    end
-                    F3_AND:    begin dinstr_o.valid = 1'b1; dinstr_o.op = ANDI;   end
-                    F3_SLL: begin  // SLLI, sadece funct7 = 0
+                    F3_ADDSUB: begin dinstr_o.valid = 1'b1; dinstr_o.op = ADDI;  end
+                    F3_SLT:    begin dinstr_o.valid = 1'b1; dinstr_o.op = SLTI;  end
+                    F3_SLTU:   begin dinstr_o.valid = 1'b1; dinstr_o.op = SLTIU; end
+                    F3_XOR:    begin dinstr_o.valid = 1'b1; dinstr_o.op = XORI;  end
+                    F3_OR:     begin dinstr_o.valid = 1'b1; dinstr_o.op = ORI;   end
+                    F3_AND:    begin dinstr_o.valid = 1'b1; dinstr_o.op = ANDI;  end
+                    F3_SLL: begin // SLLI, funct7 = 0 only
                         if (funct7 == F7_DEFAULT) begin
                             dinstr_o.valid = 1'b1; dinstr_o.op = SLLI;
                         end
                     end
-                    F3_SR: begin   // SRLI / SRAI, funct7'ye göre
+                    F3_SR: begin  // SRLI / SRAI by funct7
                         if      (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SRLI; end
                         else if (funct7 == F7_ALT)     begin dinstr_o.valid = 1'b1; dinstr_o.op = SRAI; end
                     end
@@ -138,63 +141,81 @@ module anv32_decoder
                     dinstr_o.rd_valid  = 1'b1;
                     dinstr_o.rs1_valid = 1'b1;
                     dinstr_o.imm_valid = 1'b1;
-                    // shift'lerde immediate = shamt, diğerlerinde I-type
+                    // shifts use shamt, others use I-type immediate
                     dinstr_o.imm = (funct3 == F3_SLL || funct3 == F3_SR)
                                  ? imm_shamt(instr_i)
                                  : imm_i_type(instr_i);
                 end
             end
 
-            // ---- OP (register-register) ------------------------------------
+            // ---- OP (register-register): base RV32I + optional RV32M --------
             OPC_OP: begin
-                unique case (funct3)
-                    F3_ADDSUB: begin
-                        if      (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = ADD; end
-                        else if (funct7 == F7_ALT)     begin dinstr_o.valid = 1'b1; dinstr_o.op = SUB; end
-                    end
-                    F3_SLL:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SLL;  end
-                    F3_SLT:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SLT;  end
-                    F3_SLTU: if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SLTU; end
-                    F3_XOR:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = XOR;  end
-                    F3_SR: begin
-                        if      (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SRL; end
-                        else if (funct7 == F7_ALT)     begin dinstr_o.valid = 1'b1; dinstr_o.op = SRA; end
-                    end
-                    F3_OR:   if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = OR;   end
-                    F3_AND:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = AND;  end
-                    default: ;
-                endcase
+                if (HAS_M && funct7 == F7_MULDIV) begin
+                    // RV32M multiply/divide (decoded only when HAS_M=1)
+                    unique case (funct3)
+                        F3_MUL:    begin dinstr_o.valid = 1'b1; dinstr_o.op = MUL;    end
+                        F3_MULH:   begin dinstr_o.valid = 1'b1; dinstr_o.op = MULH;   end
+                        F3_MULHSU: begin dinstr_o.valid = 1'b1; dinstr_o.op = MULHSU; end
+                        F3_MULHU:  begin dinstr_o.valid = 1'b1; dinstr_o.op = MULHU;  end
+                        F3_DIV:    begin dinstr_o.valid = 1'b1; dinstr_o.op = DIV;    end
+                        F3_DIVU:   begin dinstr_o.valid = 1'b1; dinstr_o.op = DIVU;   end
+                        F3_REM:    begin dinstr_o.valid = 1'b1; dinstr_o.op = REM;    end
+                        F3_REMU:   begin dinstr_o.valid = 1'b1; dinstr_o.op = REMU;   end
+                        default: ;
+                    endcase
+                end else begin
+                    // base RV32I register-register
+                    unique case (funct3)
+                        F3_ADDSUB: begin
+                            if      (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = ADD; end
+                            else if (funct7 == F7_ALT)     begin dinstr_o.valid = 1'b1; dinstr_o.op = SUB; end
+                        end
+                        F3_SLL:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SLL;  end
+                        F3_SLT:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SLT;  end
+                        F3_SLTU: if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SLTU; end
+                        F3_XOR:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = XOR;  end
+                        F3_SR: begin
+                            if      (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = SRL; end
+                            else if (funct7 == F7_ALT)     begin dinstr_o.valid = 1'b1; dinstr_o.op = SRA; end
+                        end
+                        F3_OR:   if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = OR;   end
+                        F3_AND:  if (funct7 == F7_DEFAULT) begin dinstr_o.valid = 1'b1; dinstr_o.op = AND;  end
+                        default: ;
+                    endcase
+                end
+                // both base R-type and M are rd/rs1/rs2, no immediate
                 if (dinstr_o.valid) begin
                     dinstr_o.rd_valid  = 1'b1;
                     dinstr_o.rs1_valid = 1'b1;
                     dinstr_o.rs2_valid = 1'b1;
-                    // R-type'ta immediate yok
                 end
             end
 
-            // ---- SYSTEM (ECALL/EBREAK;) -----------------------
+            // ---- SYSTEM (ECALL/EBREAK; CSR added in M3) ---------------------
             OPC_SYSTEM: begin
                 if (funct3 == F3_SYSTEM) begin
                     unique case (instr_i[31:20])
-                        SYS_ECALL:  begin dinstr_o.valid = 1'b1; dinstr_o.op = ECALL;  end
+                        SYS_ECALL:  begin dinstr_o.valid = 1'b1; dinstr_o.op = ECALL; end
                         SYS_EBREAK: begin
-                            dinstr_o.valid  = 1'b1; dinstr_o.op = EBREAK;
-                            dinstr_o.is_halt = 1'b1;   // sim-stop; M4'te normal trap olacak
+                            dinstr_o.valid   = 1'b1; dinstr_o.op = EBREAK;
+                            dinstr_o.is_halt = 1'b1; // sim-stop; becomes a real trap in M4
                         end
-                        default: ; // MRET/WFI/CSR etc. -> illegal for now
+                        default: ; // MRET/WFI/etc -> illegal for now
                     endcase
                 end
-                // funct3 != 0 -> CSR instructions, illegal for now
+                // funct3 != 0 -> CSR ops, illegal until M3
             end
 
             default: ; // unknown opcode -> illegal (valid 0)
         endcase
 
-        // --- Decode-time classify -----------
+        // --- Decode-time classification (pipeline helpers) ------------------
         dinstr_o.is_mem = dinstr_o.valid &&
             (dinstr_o.op inside {LB, LH, LW, LBU, LHU, SB, SH, SW});
         dinstr_o.is_pc_changer = dinstr_o.valid &&
             (dinstr_o.op inside {JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU});
+        dinstr_o.is_muldiv = dinstr_o.valid &&
+            (dinstr_o.op inside {MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU});
     end
 
 endmodule

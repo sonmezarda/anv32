@@ -51,6 +51,17 @@ package anv32_isa_pkg;
     localparam logic [6:0] F7_DEFAULT = 7'b0000000;
     localparam logic [6:0] F7_ALT     = 7'b0100000;  // SUB, SRA, SRAI
 
+    // M extension (RV32M): OP opcode + funct7 = 0000001
+    localparam logic [6:0] F7_MULDIV = 7'b0000001;
+    localparam logic [2:0] F3_MUL    = 3'b000;
+    localparam logic [2:0] F3_MULH   = 3'b001;
+    localparam logic [2:0] F3_MULHSU = 3'b010;
+    localparam logic [2:0] F3_MULHU  = 3'b011;
+    localparam logic [2:0] F3_DIV    = 3'b100;
+    localparam logic [2:0] F3_DIVU   = 3'b101;
+    localparam logic [2:0] F3_REM    = 3'b110;
+    localparam logic [2:0] F3_REMU   = 3'b111;
+
     // SYSTEM instr[31:20]
     localparam logic [11:0] SYS_ECALL  = 12'h000;
     localparam logic [11:0] SYS_EBREAK = 12'h001;
@@ -71,6 +82,8 @@ package anv32_isa_pkg;
         ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI,
         // op (register-register)
         ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND,
+        // M extension (RV32M)
+        MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU,
         // system
         ECALL, EBREAK,
         // catch-all
@@ -98,6 +111,7 @@ package anv32_isa_pkg;
 
         logic            is_mem;        // load/store
         logic            is_pc_changer; // jump/branch
+        logic            is_muldiv;     // RV32M op (needs multi-cycle unit)
         logic            is_halt;       // EBREAK -> sim-stop
     } dinstr_t;
 
