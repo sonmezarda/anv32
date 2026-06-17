@@ -1,0 +1,39 @@
+# ---- Gowin üretilen çıktılar ----
+fpga/gowin/impl/
+fpga/gowin/*.log
+fpga/gowin/*.rpt.html
+fpga/gowin/.gowinSynplifyPrj/
+*.fs
+*.bin
+*.json.bak
+
+# ---- Simülasyon build çıktıları ----
+sim/obj_dir/
+sim/**/*.vcd
+sim/**/*.fst
+*.out
+
+# ---- Yazılım build artefaktları ----
+sw/**/*.o
+sw/**/*.elf
+sw/**/*.lst
+sw/**/*.map
+sw/**/*.hex
+sw/**/*.dump
+
+# ---- Toolchain (repoya konmaz, ayrı kurulur) ----
+toolchain/xpack-*/
+toolchain/*.tar.gz
+
+# ---- Editör / OS ----
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+local/
+./local/
+/tmp
+
+lcl*
