@@ -37,3 +37,5 @@ local/
 /tmp
 
 lcl*
+
+*obj_dir/
