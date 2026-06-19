@@ -31,7 +31,10 @@ module tb_fetch_stage;
         return exp_mem[pc[7:2]];
     endfunction
 
-    anv32i1_top dut (
+    anv32i1_top #(
+        .PC_RESET_VALUE(RESET_PC),
+        .INIT_FILE("./sim/data/fetch_test")
+    ) dut (
         .clk_i(clk), .rst_i(rst), .stall_i(stall),
         .pc_jmp_en_i(pc_jmp_en), .pc_jmp_addr_i(pc_jmp_addr),
         .pc_o(pc_o), .instr_o(instr_o), .instr_valid_o(instr_valid)

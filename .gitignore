@@ -11,7 +11,9 @@ fpga/gowin/.gowinSynplifyPrj/
 sim/obj_dir/
 sim/**/*.vcd
 sim/**/*.fst
+sim/**/*_lane[0-3].hex
 *.out
+build/
 
 # ---- Yazılım build artefaktları ----
 sw/**/*.o

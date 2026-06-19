@@ -39,3 +39,8 @@ SoC sabittir; çekirdek takılıp çıkarılabilir (swappable core).
 ## Yol Haritası
 
 Bkz. `docs/roadmap.md` — M0 (kurulum) → M14 (inovasyon).
+
+## Simülasyon
+
+Verilator testleri ve C → hex → byte-lane hex akışı için bkz.
+`docs/simulation.md`.

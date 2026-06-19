@@ -21,6 +21,12 @@ module anv32_bram_tdp #(
         for (i = 0; i < 4; i++) begin : lane
             logic [7:0] mem [0:DEPTH-1];
 
+            initial begin
+                if (INIT_FILE != "") begin
+                    $readmemh($sformatf("%s_lane%0d.hex", INIT_FILE, i), mem);
+                end
+            end
+
             // Port A — no-change (WRITE_MODE = 2'b00): Gowin DPB destekler
             always_ff @(posedge clk) begin
                 if (we_a[i]) mem[addr_a]       <= wdata_a[i*8 +: 8];

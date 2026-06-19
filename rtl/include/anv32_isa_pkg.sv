@@ -142,21 +142,21 @@ package anv32_isa_pkg;
     } dinstr_t;
 
     // Executed Instruction
-        typedef struct packed {
+    typedef struct packed {
         // commit-log / diff
         logic [XLEN-1:0] pc;
         logic [31:0]     id;
         op_e             op;            // mem-stage load/store genişliği + log
         logic            valid;
 
-        // execute sonuçları
+        // execute results
         logic [XLEN-1:0] alu_result;   // rd değeri ya da bellek adresi
         logic [XLEN-1:0] write_data;   // store verisi (rs2)
         logic [XLEN-1:0] link_pc;      // pc+4 (JAL/JALR link)
         logic            branch_taken;
         logic [XLEN-1:0] pc_target;    // JALR'da LSB temizlenmiş
 
-        // mem + writeback için kontrol passthrough
+        // mem + writeback control passthrough
         logic [4:0]      rd_idx;
         logic            rd_valid;
         wb_sel_e         wb_sel;
@@ -164,6 +164,18 @@ package anv32_isa_pkg;
         logic            is_pc_changer;
         logic            is_halt;
     } einstr_t;
+
+    // Instruction after memory stage
+    typedef struct packed {
+        logic            valid;
+        logic [XLEN-1:0] link_pc;      // pc+4 (JAL/JALR link)
+        logic [XLEN-1:0] alu_result;   // rd değeri ya da bellek adresi
+        logic [4:0]      rd_idx;
+        logic            rd_valid;
+        wb_sel_e         wb_sel;        // rd <- alu / mem / pc+4
+    } minstr_t;
+
+
 
     // ------------------------------------------------------------------------
     // immediate extraction functions
