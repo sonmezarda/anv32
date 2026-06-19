@@ -13,8 +13,8 @@ module toptest(
     logic [31:0] wdata_a;
     logic [31:0] wdata_b;
 
-    logic we_a;
-    logic we_b;
+    logic [3:0] we_a;
+    logic [3:0] we_b;
 
     logic [31:0] rdata_a;
     logic [31:0] rdata_b;
@@ -31,10 +31,10 @@ module toptest(
 
     // İki port da arada bir yazsın.
     // Aynı anda aynı adrese yazma durumundan kaçınmak için adresleri farklı seçtik.
-    assign we_a = counter[8];
-    assign we_b = counter[9];
+    assign we_a = counter[8:5];
+    assign we_b = counter[12:9];
 
-    bram_tdp #(
+    anv32_bram_tdp #(
         .ADDR_W(ADDR_W),
         .INIT_FILE("")
     ) u_bram (
