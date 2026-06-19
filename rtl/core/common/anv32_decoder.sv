@@ -209,6 +209,39 @@ module anv32_decoder
             default: ; // unknown opcode -> illegal (valid 0)
         endcase
 
+        // --- ALU işlemi: adres/hedef üreten her şey ADD ---
+        unique case (dinstr_o.op)
+            SUB:          dinstr_o.alu_op = ALU_SUB;
+            SLLI, SLL:    dinstr_o.alu_op = ALU_SLL;
+            SLTI, SLT:    dinstr_o.alu_op = ALU_SLT;
+            SLTIU, SLTU:  dinstr_o.alu_op = ALU_SLTU;
+            XORI, XOR:    dinstr_o.alu_op = ALU_XOR;
+            SRLI, SRL:    dinstr_o.alu_op = ALU_SRL;
+            SRAI, SRA:    dinstr_o.alu_op = ALU_SRA;
+            ORI, OR:      dinstr_o.alu_op = ALU_OR;
+            ANDI, AND:    dinstr_o.alu_op = ALU_AND;
+            // ADDI,ADD,LUI,AUIPC,JAL,JALR,load,store,branch -> ADD
+            default:      dinstr_o.alu_op = ALU_ADD;
+        endcase
+
+        // --- A operandı ---
+        unique case (dinstr_o.op)
+            AUIPC, JAL, BEQ, BNE, BLT, BGE, BLTU, BGEU: dinstr_o.a_sel = A_PC;
+            LUI:                                        dinstr_o.a_sel = A_ZERO;
+            default:                                    dinstr_o.a_sel = A_RS1; // JALR, load, store, OP, OP-IMM
+        endcase
+
+        // --- B operandı: register-register ops rs2, gerisi imm ---
+        dinstr_o.b_sel = (dinstr_o.op inside
+            {ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND}) ? B_RS2 : B_IMM;
+
+        // --- writeback kaynağı ---
+        unique case (dinstr_o.op)
+            LB, LH, LW, LBU, LHU: dinstr_o.wb_sel = WB_MEM;
+            JAL, JALR:            dinstr_o.wb_sel = WB_PC4;
+            default:              dinstr_o.wb_sel = WB_ALU;
+        endcase
+        
         // --- Decode-time classification (pipeline helpers) ------------------
         dinstr_o.is_mem = dinstr_o.valid &&
             (dinstr_o.op inside {LB, LH, LW, LBU, LHU, SB, SH, SW});

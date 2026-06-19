@@ -89,7 +89,21 @@ package anv32_isa_pkg;
         // catch-all
         UNKNOWN
     } op_e;
-    
+
+    typedef enum logic [3:0] {
+        ALU_ADD, ALU_SUB, ALU_SLL, ALU_SLT, ALU_SLTU,
+        ALU_XOR, ALU_SRL, ALU_SRA, ALU_OR,  ALU_AND
+    } alu_op_e;
+
+    // --- ALU A operandı ---
+    typedef enum logic [1:0] { A_RS1, A_PC, A_ZERO } a_sel_e;
+
+    // --- ALU B operandı ---
+    typedef enum logic [0:0] { B_RS2, B_IMM } b_sel_e;
+
+    // --- rd'ye ne yazılacak ---
+    typedef enum logic [1:0] { WB_ALU, WB_MEM, WB_PC4 } wb_sel_e;
+
     // Fetched Instruction
     typedef struct packed {
         logic [XLEN-1:0] pc;
@@ -116,11 +130,40 @@ package anv32_isa_pkg;
         logic [XLEN-1:0] imm;           // extracted immediate
         logic            imm_valid;     // is imm valid
 
+        alu_op_e         alu_op;        // ALU hangi işlemi yapacak
+        a_sel_e          a_sel;         // A = rs1 / pc / 0
+        b_sel_e          b_sel;         // B = rs2 / imm
+        wb_sel_e         wb_sel;        // rd <- alu / mem / pc+4
+
         logic            is_mem;        // load/store
         logic            is_pc_changer; // jump/branch
         logic            is_muldiv;     // RV32M op (needs multi-cycle unit)
         logic            is_halt;       // EBREAK -> sim-stop
     } dinstr_t;
+
+    // Executed Instruction
+        typedef struct packed {
+        // commit-log / diff
+        logic [XLEN-1:0] pc;
+        logic [31:0]     id;
+        op_e             op;            // mem-stage load/store genişliği + log
+        logic            valid;
+
+        // execute sonuçları
+        logic [XLEN-1:0] alu_result;   // rd değeri ya da bellek adresi
+        logic [XLEN-1:0] write_data;   // store verisi (rs2)
+        logic [XLEN-1:0] link_pc;      // pc+4 (JAL/JALR link)
+        logic            branch_taken;
+        logic [XLEN-1:0] pc_target;    // JALR'da LSB temizlenmiş
+
+        // mem + writeback için kontrol passthrough
+        logic [4:0]      rd_idx;
+        logic            rd_valid;
+        wb_sel_e         wb_sel;
+        logic            is_mem;
+        logic            is_pc_changer;
+        logic            is_halt;
+    } einstr_t;
 
     // ------------------------------------------------------------------------
     // immediate extraction functions
