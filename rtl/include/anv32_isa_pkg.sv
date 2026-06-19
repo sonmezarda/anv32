@@ -89,6 +89,13 @@ package anv32_isa_pkg;
         // catch-all
         UNKNOWN
     } op_e;
+    
+    // Fetched Instruction
+    typedef struct packed {
+        logic [XLEN-1:0] pc;
+        logic [XLEN-1:0] instr;
+        logic            valid;
+    } finstr_t;   // fetch -> decode packet
 
     // Decoded instruction
     typedef struct packed {
