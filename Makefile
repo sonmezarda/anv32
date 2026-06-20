@@ -46,6 +46,16 @@ SPIKE_RAW_LOG ?=
 SPIKE_NORM_LOG ?=
 CORE_NORM_LOG ?=
 DIFF_LOG ?=
+ASM_HARD_CYCLES ?= 180
+ASM_HARD_SPIKE_INSNS ?= 180
+ASM_HARD_TESTS ?= \
+	sw/examples/rv32i_alu_stress.S \
+	sw/examples/rv32i_branch_jump_stress.S \
+	sw/examples/rv32i_load_store_stress.S \
+	sw/examples/rv32i_hazard_stress.S \
+	sw/examples/load_timing.S \
+	sw/examples/hazard_raw.S \
+	sw/examples/hazard_auipc_jalr.S
 
 COMMON_PKGS := \
 	rtl/include/anv32_config_pkg.sv \
@@ -167,7 +177,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run asm-run asm-golden-run asm-diff-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run asm-run asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -426,6 +436,16 @@ asm-diff-test:
 		--diff-out "$$diff_log"; \
 	echo "Diff log: $$diff_log"
 
+asm-hard-test:
+	@set -euo pipefail; \
+	for asm in $(ASM_HARD_TESTS); do \
+		echo "---- $$asm ----"; \
+		$(MAKE) --no-print-directory asm-diff-test \
+			ASM="$$asm" \
+			CYCLES=$(ASM_HARD_CYCLES) \
+			SPIKE_INSNS=$(ASM_HARD_SPIKE_INSNS); \
+	done
+
 build-%:
 	$(call check_test,$*)
 	$(VERILATOR) $(VERILATOR_FLAGS) --top-module $(call top_for,$*) $(call src_for,$*)
@@ -457,6 +477,7 @@ help:
 	@echo "                       Build at 0x80000000, run Spike golden and CPU trace"
 	@echo "  make asm-diff-test ASM=file.S"
 	@echo "                       Diff Spike golden commit log against the core"
+	@echo "  make asm-hard-test  Run the RV32I hard assembly diff suite"
 	@echo "  make cpu-run CYCLES=40 TRACE=1"
 	@echo "                       Limit cycles and emit $(OBJ_DIR)/cpu_trace.vcd"
 	@echo "  make cpu-run PIPELINE_LOG=build/sw/trace.log"

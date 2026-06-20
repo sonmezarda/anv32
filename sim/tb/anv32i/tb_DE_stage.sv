@@ -288,7 +288,8 @@ module anv32i1_DE_stage_tb
         chk1("valid", einstr.valid, 1'b0);
 
         // --------------------------------------------------------------
-        //  Stall holds the output register
+        //  Stall injects a bubble so an older load can advance to M/W while
+        //  the dependent instruction is held in fetch/decode.
         // --------------------------------------------------------------
         run("STALL_pre", enc_r(F7_DEFAULT, 5'd2, 5'd1, F3_ADDSUB, 5'd10, OPC_OP), 32'h0);
         chk ("alu_result", einstr.alu_result, 32'd13);    // ADD captured
@@ -299,7 +300,7 @@ module anv32i1_DE_stage_tb
             finstr.instr = enc_r(F7_ALT, 5'd2, 5'd1, F3_ADDSUB, 5'd10, OPC_OP); // SUB
             @(posedge clk);
             #1;
-            chk ("held",  einstr.alu_result, 32'd13);     // still ADD, not SUB(=7)
+            chk1("bubble", einstr.valid, 1'b0);
             @(negedge clk);
             stall = 1'b0;
         end

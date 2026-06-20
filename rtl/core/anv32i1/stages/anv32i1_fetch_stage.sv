@@ -78,9 +78,10 @@ module anv32i1_fetch_stage
         end
     end
 
-    // instr to DE: buffered while stalled, straight from RAM otherwise
+    // instr to DE: use the registered stall state to avoid a comb loop through
+    // hazard -> stall -> fetch instruction -> decode -> hazard.
     assign finstr_o.pc = pc_align;
     assign finstr_o.valid = instr_valid;
-    assign finstr_o.instr = stall_i ? skid_buffer : instr_i;
+    assign finstr_o.instr = stall_prev ? skid_buffer : instr_i;
 
 endmodule

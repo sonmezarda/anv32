@@ -75,7 +75,7 @@ module anv32i1_DE_stage
     always_ff @(posedge clk_i) begin
         if (rst_i) begin
             einstr_o <= '0;
-        end else if (flush_i) begin
+        end else if (flush_i || stall_i) begin
             einstr_o <= '0;
         end else if (!stall_i) begin
             einstr_o.valid         <= finstr_i.valid && dinstr.valid;
