@@ -1,4 +1,4 @@
-module anv32i_W_stage
+module anv32i1_W_stage
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 (
@@ -16,12 +16,12 @@ module anv32i_W_stage
     assign rd_wen_o = ~rst_i && ~stall_i && minstr_i.valid && minstr_i.rd_valid 
                         && ~(minstr_i.wb_sel == WB_MEM);
 
-    assign rd_idx_o = minstr_t.rd_idx;
+    assign rd_idx_o = minstr_i.rd_idx;
     assign rd_wdata_o = result;
 
     always_comb begin : result_select_comb
-        case(minstr.wb_sel)
-            WB_ALU : result = minstr.alu_result; 
+        case(minstr_i.wb_sel)
+            WB_ALU : result = minstr_i.alu_result; 
             WB_MEM : result = mem_rdata_i;
             WB_PC4 : result = minstr_i.link_pc;
             default: result = 0;

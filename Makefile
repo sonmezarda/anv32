@@ -23,6 +23,9 @@ C_SRC      ?= $(if $(C),$(C),sw/examples/smoke.c)
 SW_NAME    ?= $(basename $(notdir $(C_SRC)))
 SW_KEEP_DIR ?= build/sw/$(SW_NAME)
 KEEP       ?=
+CYCLES     ?= 80
+ASM_LINES  ?= 120
+TRACE      ?= 0
 
 COMMON_PKGS := \
 	rtl/include/anv32_config_pkg.sv \
@@ -98,6 +101,22 @@ SRC_program_fetch := \
 	rtl/core/anv32i1/anv32i1_top.sv \
 	sim/tb/anv32i/tb_program_fetch.sv
 
+ANV32I1_TOP_SRC := \
+	$(COMMON_PKGS) \
+	rtl/common/mem/anv32_bram_tdp.sv \
+	rtl/core/common/anv32_regfile.sv \
+	rtl/core/common/anv32_alu.sv \
+	rtl/core/common/anv32_decoder.sv \
+	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
+	rtl/core/anv32i1/anv32i1_top.sv
+
+SRC_cpu_trace := \
+	$(ANV32I1_TOP_SRC) \
+	sim/tb/anv32i/tb_cpu_trace.sv
+
 VERILATOR_WARNINGS_QUIET := \
 	-Wno-DECLFILENAME \
 	-Wno-EOFNEWLINE \
@@ -124,7 +143,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -188,6 +207,47 @@ sw-fetch:
 
 c-fetch c-run: sw-fetch
 
+cpu-run:
+	@set -euo pipefail; \
+	src="$(C_SRC)"; \
+	name="$(SW_NAME)"; \
+	work_dir="$(SW_KEEP_DIR)"; \
+	mkdir -p "$$work_dir"; \
+	echo "SW build: $$src -> $$work_dir"; \
+	$(PYTHON) $(BUILD_RV32) \
+		--src "$$src" \
+		--out-dir "$$work_dir" \
+		--name "$$name" \
+		--cc "$(SW_CC)" \
+		--objcopy "$(SW_OBJCOPY)" \
+		--objdump "$(SW_OBJDUMP)" \
+		--bin-to-hex "$(BIN_TO_HEX)" \
+		--split-hex "$(HEX_SPLIT)" \
+		--python "$(PYTHON)"; \
+	echo; \
+	echo "Compiler assembly: $$work_dir/$$name.s"; \
+	echo "Linked disassembly: $$work_dir/$$name.dump"; \
+	echo "Memory image: $$work_dir/$$name.hex and $$work_dir/$${name}_lane[0-3].hex"; \
+	echo; \
+	echo "---- linked disassembly (first $(ASM_LINES) lines) ----"; \
+	sed -n '1,$(ASM_LINES)p' "$$work_dir/$$name.dump"; \
+	echo "---- cpu trace ($(CYCLES) cycles max) ----"; \
+	trace_flags=""; \
+	trace_arg=""; \
+	if [ "$(TRACE)" = "1" ]; then \
+		trace_flags="--trace"; \
+		trace_arg="+trace"; \
+	fi; \
+	$(VERILATOR) $(VERILATOR_FLAGS) $$trace_flags \
+		--top-module tb_cpu_trace \
+		-GINIT_FILE=\"$$work_dir/$$name\" \
+		-GMAX_CYCLES=$(CYCLES) \
+		$(SRC_cpu_trace); \
+	$(OBJ_DIR)/Vtb_cpu_trace $$trace_arg; \
+	if [ "$(TRACE)" = "1" ]; then \
+		echo "Waveform: $(OBJ_DIR)/cpu_trace.vcd"; \
+	fi
+
 build-%:
 	$(call check_test,$*)
 	$(VERILATOR) $(VERILATOR_FLAGS) --top-module $(call top_for,$*) $(call src_for,$*)
@@ -211,6 +271,10 @@ help:
 	@echo "  make sw-fetch        Build C_SRC and verify program image through fetch"
 	@echo "  make sw-fetch KEEP=asm,hex,lanes"
 	@echo "                       Keep selected intermediates under $(SW_KEEP_DIR)"
+	@echo "  make cpu-run C=file.c"
+	@echo "                       Build C, print disassembly, run top-level CPU trace"
+	@echo "  make cpu-run CYCLES=40 TRACE=1"
+	@echo "                       Limit cycles and emit $(OBJ_DIR)/cpu_trace.vcd"
 	@echo "  make WARN=1 de       Show Verilator lint warnings"
 	@echo "  make clean           Remove build output and generated hex"
 	@echo
@@ -219,6 +283,8 @@ help:
 	@echo "  C_SRC=file.c         C source for sw-fetch (default $(C_SRC))"
 	@echo "  SW_NAME=name         Artifact base name (default from C_SRC)"
 	@echo "  KEEP=asm,hex,lanes   Keep C assembly, word hex, and lane hex"
+	@echo "  CYCLES=n             Max CPU trace cycles (default $(CYCLES))"
+	@echo "  TRACE=1              Enable Verilator VCD trace for cpu-run"
 	@echo
 	@echo "Registered tests:"
 	@printf '  %s\n' $(TESTS)
