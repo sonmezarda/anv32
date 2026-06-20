@@ -14,6 +14,12 @@ module tb_cpu_trace
     logic [31:0] pc_o;
     logic [31:0] instr_o;
     logic instr_valid_o;
+    logic [31:0] instr_addr;
+    logic [31:0] instr_rdata;
+    logic [31:0] mem_addr;
+    logic [31:0] mem_wdata;
+    logic [31:0] mem_rdata;
+    logic [3:0]  mem_we;
     int unsigned cycle = 0;
     bit halt_seen = 1'b0;
     int log_fd = 0;
@@ -27,8 +33,7 @@ module tb_cpu_trace
     always #5 clk = ~clk;
 
     anv32i1_top #(
-        .PC_RESET_VALUE(PC_RESET_VALUE),
-        .INIT_FILE(INIT_FILE)
+        .PC_RESET_VALUE(PC_RESET_VALUE)
     ) dut (
         .clk_i(clk),
         .rst_i(rst),
@@ -37,7 +42,28 @@ module tb_cpu_trace
         .pc_jmp_addr_i('0),
         .pc_o(pc_o),
         .instr_o(instr_o),
-        .instr_valid_o(instr_valid_o)
+        .instr_valid_o(instr_valid_o),
+        .instr_i(instr_rdata),
+        .instr_addr_o(instr_addr),
+        .mem_rdata_i(mem_rdata),
+        .mem_wdata_o(mem_wdata),
+        .mem_addr_o(mem_addr),
+        .mem_we(mem_we)
+    );
+
+    anv32_bram_tdp #(
+        .ADDR_W(10),
+        .INIT_FILE(INIT_FILE)
+    ) ram (
+        .clk(clk),
+        .addr_a(mem_addr[11:2]),
+        .wdata_a(mem_wdata),
+        .we_a(mem_we),
+        .rdata_a(mem_rdata),
+        .addr_b(instr_addr[11:2]),
+        .wdata_b(32'b0),
+        .we_b(4'b0),
+        .rdata_b(instr_rdata)
     );
 
     function automatic string op_name(input op_e op);
@@ -272,7 +298,7 @@ module tb_cpu_trace
                                   hex32(dut.finstr.pc),
                                   hex32(dut.finstr.instr),
                                   hex32(dut.fetch_addr),
-                                  hex10(dut.pmem_addr)));
+                                  hex10(instr_addr[11:2])));
         end else begin
             emit_detail("  IF(fetch): bubble");
         end

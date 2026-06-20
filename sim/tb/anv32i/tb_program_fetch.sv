@@ -18,6 +18,8 @@ module tb_program_fetch
     logic [31:0] pc_o;
     logic [31:0] instr_o;
     logic instr_valid;
+    logic [31:0] instr_addr;
+    logic [31:0] instr_rdata;
 
     logic [31:0] expected [0:WORDS-1];
     int unsigned errors = 0;
@@ -25,8 +27,7 @@ module tb_program_fetch
     always #5 clk = ~clk;
 
     anv32i1_top #(
-        .PC_RESET_VALUE(PC_RESET_VALUE),
-        .INIT_FILE(INIT_FILE)
+        .PC_RESET_VALUE(PC_RESET_VALUE)
     ) dut (
         .clk_i(clk),
         .rst_i(rst),
@@ -35,7 +36,28 @@ module tb_program_fetch
         .pc_jmp_addr_i(pc_jmp_addr),
         .pc_o(pc_o),
         .instr_o(instr_o),
-        .instr_valid_o(instr_valid)
+        .instr_valid_o(instr_valid),
+        .instr_i(instr_rdata),
+        .instr_addr_o(instr_addr),
+        .mem_rdata_i(32'b0),
+        .mem_wdata_o(),
+        .mem_addr_o(),
+        .mem_we()
+    );
+
+    anv32_bram_tdp #(
+        .ADDR_W(10),
+        .INIT_FILE(INIT_FILE)
+    ) ram (
+        .clk(clk),
+        .addr_a('0),
+        .wdata_a(32'b0),
+        .we_a(4'b0),
+        .rdata_a(),
+        .addr_b(instr_addr[11:2]),
+        .wdata_b(32'b0),
+        .we_b(4'b0),
+        .rdata_b(instr_rdata)
     );
 
     task automatic tick();

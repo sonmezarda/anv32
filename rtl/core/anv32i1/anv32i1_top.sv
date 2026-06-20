@@ -2,35 +2,30 @@ module anv32i1_top
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 #(
-    parameter logic [XLEN-1:0] PC_RESET_VALUE = RESET_PC,
-    parameter INIT_FILE = "./sim/data/prog.hex",
-    parameter BRAM_ADDR_W = 10
+    parameter logic [XLEN-1:0] PC_RESET_VALUE = RESET_PC
 )(
     input  logic            clk_i, rst_i, stall_i, pc_jmp_en_i,
     input  logic [31:0]     pc_jmp_addr_i,
     output logic [31:0]     instr_o, pc_o,
     output logic            instr_valid_o,
 
+    input  logic [XLEN-1:0] instr_i,
+    output logic [XLEN-1:0] instr_addr_o,
+
     input  logic [XLEN-1:0] mem_rdata_i,
     output logic [XLEN-1:0] mem_wdata_o,
     output logic [XLEN-1:0] mem_addr_o,
     output logic [3:0]      mem_we
 );
-    logic [XLEN-1:0] fetch_addr, bram_instr;
+    logic [XLEN-1:0] fetch_addr;
 
     assign mem_wdata_o = dmem_wdata;
     assign mem_addr_o  = m_stage_dmem_addr_out;
     assign mem_we      = dmem_we;
+    assign instr_addr_o = fetch_addr;
 
-    logic [BRAM_ADDR_W-1:0] dmem_addr;
     logic [XLEN-1:0]        dmem_wdata;
-    logic [XLEN-1:0]        dmem_rdata;
     logic [3:0]             dmem_we;
-
-    logic [BRAM_ADDR_W-1:0] pmem_addr;
-    logic [XLEN-1:0]        pmem_wdata;
-    logic [XLEN-1:0]        pmem_rdata;
-    logic [3:0]             pmem_we;
 
     logic                   stall_f, stall_de, stall_m, stall_w;
 
@@ -60,15 +55,29 @@ module anv32i1_top
     logic                   flush_DE;
     fwd_sel_e               rs1_fwd_sel;
     fwd_sel_e               rs2_fwd_sel;
+    logic                   stall_f_eff;
+    logic                   stall_de_eff;
+    logic                   stall_m_eff;
+    logic                   stall_w_eff;
     logic [XLEN-1:0]        m_fwd_data;
     logic [XLEN-1:0]        w_fwd_data;
     logic [XLEN-1:0]        rs1_DE_din;
     logic [XLEN-1:0]        rs2_DE_din;
 
     always_comb begin : pc_jump_comb
-        pc_jmp_en   = einstr.branch_taken && einstr.valid && einstr.is_pc_changer;
-        pc_jmp_addr = einstr.pc_target;
+        if (pc_jmp_en_i) begin
+            pc_jmp_en   = 1'b1;
+            pc_jmp_addr = pc_jmp_addr_i;
+        end else begin
+            pc_jmp_en   = einstr.branch_taken && einstr.valid && einstr.is_pc_changer;
+            pc_jmp_addr = einstr.pc_target;
+        end
     end
+
+    assign stall_f_eff  = stall_i || stall_f;
+    assign stall_de_eff = stall_i || stall_de;
+    assign stall_m_eff  = stall_i;
+    assign stall_w_eff  = stall_i;
 
     anv32i1_hazard_unit hazard_unit(
         .clk_i(clk_i), 
@@ -87,10 +96,10 @@ module anv32i1_top
     anv32i1_fetch_stage #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
         .clk_i(clk_i), 
         .rst_i(rst_i), 
-        .stall_i(stall_f),
+        .stall_i(stall_f_eff),
         .pc_jmp_en_i(pc_jmp_en), 
         .pc_jmp_addr_i(pc_jmp_addr),
-        .instr_i(bram_instr),
+        .instr_i(instr_i),
         .fetch_addr_o(fetch_addr),
         .finstr_o(finstr)
     );
@@ -123,7 +132,7 @@ module anv32i1_top
         .clk_i(clk_i),
         .rst_i(rst_i),
         .flush_i(flush_DE),
-        .stall_i(stall_de),
+        .stall_i(stall_de_eff),
         .finstr_i(finstr),
         .rs1_rdata_i(rs1_DE_din),
         .rs2_rdata_i(rs2_DE_din),
@@ -136,9 +145,9 @@ module anv32i1_top
     anv32i1_M_stage M(
         .clk_i(clk_i),
         .rst_i(rst_i),
-        .stall_i(stall_m),
+        .stall_i(stall_m_eff),
         .einstr_i(einstr),
-        .mem_rdata_i(dmem_rdata),
+        .mem_rdata_i(mem_rdata_i),
         .mem_addr_o(m_stage_dmem_addr_out),   //
         .mem_wdata_o(dmem_wdata),
         .mem_we_o(dmem_we),
@@ -149,7 +158,7 @@ module anv32i1_top
     anv32i1_W_stage W(
         .clk_i(clk_i),
         .rst_i(rst_i),
-        .stall_i(stall_w),
+        .stall_i(stall_w_eff),
         .minstr_i(minstr),
         .mem_rdata_i(m_stage_mem_out),
 
@@ -158,29 +167,8 @@ module anv32i1_top
         .rd_idx_o(rd_idx)
     );
 
-    assign pmem_addr = fetch_addr[BRAM_ADDR_W+1:2];
-    assign dmem_addr = m_stage_dmem_addr_out[BRAM_ADDR_W+1:2];
-    assign bram_instr = pmem_rdata;
-    assign pmem_we = 4'b0;
-    assign pmem_wdata = 32'b0;
-    assign stall_m = 1'b0;
-    assign stall_w = 1'b0;
-
-    anv32_bram_tdp #(
-        .ADDR_W(BRAM_ADDR_W), 
-        .INIT_FILE(INIT_FILE)) prog_mem (
-        .clk(clk_i),
-
-        .addr_a(pmem_addr), 
-        .wdata_a(pmem_wdata), 
-        .we_a(pmem_we), 
-        .rdata_a(pmem_rdata),
-
-        .addr_b(dmem_addr), 
-        .wdata_b(dmem_wdata), 
-        .we_b(dmem_we), 
-        .rdata_b(dmem_rdata)
-    );
+    assign stall_m = stall_m_eff;
+    assign stall_w = stall_w_eff;
 
     anv32_regfile regfile (
         .clk_i(clk_i),

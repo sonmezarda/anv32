@@ -20,6 +20,8 @@ module tb_fetch_stage;
     logic [31:0] pc_o;
     logic [31:0] instr_o;
     logic        instr_valid;
+    logic [31:0] instr_addr;
+    logic [31:0] instr_rdata;
 
     int errors = 0;
     int checks = 0;
@@ -32,12 +34,28 @@ module tb_fetch_stage;
     endfunction
 
     anv32i1_top #(
-        .PC_RESET_VALUE(RESET_PC),
-        .INIT_FILE("./sim/data/fetch_test")
+        .PC_RESET_VALUE(RESET_PC)
     ) dut (
         .clk_i(clk), .rst_i(rst), .stall_i(stall),
         .pc_jmp_en_i(pc_jmp_en), .pc_jmp_addr_i(pc_jmp_addr),
-        .pc_o(pc_o), .instr_o(instr_o), .instr_valid_o(instr_valid)
+        .pc_o(pc_o), .instr_o(instr_o), .instr_valid_o(instr_valid),
+        .instr_i(instr_rdata), .instr_addr_o(instr_addr),
+        .mem_rdata_i(32'b0), .mem_wdata_o(), .mem_addr_o(), .mem_we()
+    );
+
+    anv32_bram_tdp #(
+        .ADDR_W(10),
+        .INIT_FILE("./sim/data/fetch_test")
+    ) ram (
+        .clk(clk),
+        .addr_a('0),
+        .wdata_a(32'b0),
+        .we_a(4'b0),
+        .rdata_a(),
+        .addr_b(instr_addr[11:2]),
+        .wdata_b(32'b0),
+        .we_b(4'b0),
+        .rdata_b(instr_rdata)
     );
 
     always #5 clk = ~clk;

@@ -131,7 +131,14 @@ TOP_fetch_top := tb_fetch_stage
 SRC_fetch_top := \
 	$(COMMON_PKGS) \
 	rtl/common/mem/anv32_bram_tdp.sv \
+	rtl/core/common/anv32_regfile.sv \
+	rtl/core/common/anv32_alu.sv \
+	rtl/core/common/anv32_decoder.sv \
+	rtl/core/anv32i1/anv32i1_hazard_unit.sv \
 	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
 	rtl/core/anv32i1/anv32i1_top.sv \
 	sim/tb/anv32i/tb_top_fetchtest.sv
 HEX_fetch_top := $(FETCH_TEST_LANE_HEX)
@@ -139,7 +146,14 @@ HEX_fetch_top := $(FETCH_TEST_LANE_HEX)
 SRC_program_fetch := \
 	$(COMMON_PKGS) \
 	rtl/common/mem/anv32_bram_tdp.sv \
+	rtl/core/common/anv32_regfile.sv \
+	rtl/core/common/anv32_alu.sv \
+	rtl/core/common/anv32_decoder.sv \
+	rtl/core/anv32i1/anv32i1_hazard_unit.sv \
 	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
+	rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
 	rtl/core/anv32i1/anv32i1_top.sv \
 	sim/tb/anv32i/tb_program_fetch.sv
 
