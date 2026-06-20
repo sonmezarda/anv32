@@ -179,8 +179,8 @@ module anv32i1_M_stage_tb
         drive(nm, e, raw_rdata, 1'b0);
         chk32("addr",  mem_addr,    addr);
         chk4 ("we",    mem_we,      4'b0000);
-        chk32("rdata", mem_rdata_o, exp_rdata);
         capture();
+        chk32("rdata", mem_rdata_o, exp_rdata);
         chk_minstr(1'b1, addr, 32'h0000_0204, 5'd11, 1'b1, WB_MEM);
     endtask
 

@@ -152,6 +152,7 @@ package anv32_isa_pkg;
         // commit-log / diff
         logic [XLEN-1:0] pc;
         logic [31:0]     id;
+        logic [31:0]     instr;         // raw instruction (commit-log)
         op_e             op;            // mem-stage load/store genişliği + log
         logic            valid;
 
@@ -173,7 +174,10 @@ package anv32_isa_pkg;
 
     // Instruction after memory stage
     typedef struct packed {
+        op_e             op;
         logic            valid;
+        logic [XLEN-1:0] pc;
+        logic [31:0]     instr;         // raw instruction (commit-log)
         logic [XLEN-1:0] link_pc;      // pc+4 (JAL/JALR link)
         logic [XLEN-1:0] alu_result;   // rd değeri ya da bellek adresi
         logic [4:0]      rd_idx;

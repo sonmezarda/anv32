@@ -19,18 +19,33 @@ TEST      ?= de
 SW_CC      ?= riscv64-unknown-elf-gcc
 SW_OBJCOPY ?= riscv64-unknown-elf-objcopy
 SW_OBJDUMP ?= riscv64-unknown-elf-objdump
+SPIKE      ?= spike
 C_SRC      ?= $(if $(C),$(C),sw/examples/smoke.c)
 SW_NAME    ?= $(basename $(notdir $(C_SRC)))
 SW_KEEP_DIR ?= build/sw/$(SW_NAME)
 ASM_SRC    ?= $(if $(ASM),$(ASM),sw/examples/hazard_jalr_raw.S)
 ASM_NAME   ?= $(basename $(notdir $(ASM_SRC)))
 ASM_KEEP_DIR ?= build/asm/$(ASM_NAME)
+GOLDEN_ASM_SRC ?= $(if $(ASM),$(ASM),sw/examples/hazard_auipc_jalr.S)
+GOLDEN_ASM_NAME ?= $(basename $(notdir $(GOLDEN_ASM_SRC)))
+GOLDEN_KEEP_DIR ?= build/golden/asm/$(GOLDEN_ASM_NAME)
+LINKER     ?= sw/common/link.ld
+GOLDEN_LINKER ?= sw/common/link_80000000.ld
+PC_RESET_VALUE ?= 0
+GOLDEN_PC_RESET_VALUE ?= 2147483648
+SPIKE_ISA  ?= rv32i_zicsr
+SPIKE_PRIV ?= m
+SPIKE_INSNS ?= 200
 KEEP       ?=
 CYCLES     ?= 80
 ASM_LINES  ?= 120
 TRACE      ?= 0
 DETAIL     ?= 0
 PIPELINE_LOG ?=
+SPIKE_RAW_LOG ?=
+SPIKE_NORM_LOG ?=
+CORE_NORM_LOG ?=
+DIFF_LOG ?=
 
 COMMON_PKGS := \
 	rtl/include/anv32_config_pkg.sv \
@@ -51,6 +66,8 @@ HEX_SPLIT := tools/split_hex.py
 BIN_TO_HEX := tools/bin_to_hex.py
 BUILD_RV32 := tools/build_rv32_program.py
 BUILD_RV32_ASM := tools/build_rv32_asm_program.py
+RUN_SPIKE_LOG := tools/run_spike_log.py
+DIFF_COMMIT_LOGS := tools/diff_commit_logs.py
 
 HEX_SRC   := $(HEX_DIR)/$(PROG).hex
 LANE_IDX  := 0 1 2 3
@@ -150,7 +167,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run asm-run c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run asm-run asm-golden-run asm-diff-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -182,6 +199,7 @@ sw-fetch:
 		--cc "$(SW_CC)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
+		--linker "$(LINKER)" \
 		--bin-to-hex "$(BIN_TO_HEX)" \
 		--split-hex "$(HEX_SPLIT)" \
 		--python "$(PYTHON)"; \
@@ -192,6 +210,7 @@ sw-fetch:
 		-GINIT_FILE=\"$$work_dir/$$name\" \
 		-GWORD_HEX_FILE=\"$$work_dir/$$name.hex\" \
 		-GPROGRAM_WORDS=$$words \
+		-GPC_RESET_VALUE=$(PC_RESET_VALUE) \
 		$(SRC_program_fetch); \
 	$(OBJ_DIR)/Vtb_program_fetch; \
 	if [ -n "$$keep" ]; then \
@@ -228,6 +247,7 @@ cpu-run:
 		--cc "$(SW_CC)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
+		--linker "$(LINKER)" \
 		--bin-to-hex "$(BIN_TO_HEX)" \
 		--split-hex "$(HEX_SPLIT)" \
 		--python "$(PYTHON)"; \
@@ -256,6 +276,7 @@ cpu-run:
 		--top-module tb_cpu_trace \
 		-GINIT_FILE=\"$$work_dir/$$name\" \
 		-GMAX_CYCLES=$(CYCLES) \
+		-GPC_RESET_VALUE=$(PC_RESET_VALUE) \
 		$(SRC_cpu_trace); \
 	$(OBJ_DIR)/Vtb_cpu_trace $$trace_arg; \
 	if [ -n "$(PIPELINE_LOG)" ]; then \
@@ -279,6 +300,7 @@ asm-run:
 		--cc "$(SW_CC)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
+		--linker "$(LINKER)" \
 		--bin-to-hex "$(BIN_TO_HEX)" \
 		--split-hex "$(HEX_SPLIT)" \
 		--python "$(PYTHON)"; \
@@ -307,6 +329,7 @@ asm-run:
 		--top-module tb_cpu_trace \
 		-GINIT_FILE=\"$$work_dir/$$name\" \
 		-GMAX_CYCLES=$(CYCLES) \
+		-GPC_RESET_VALUE=$(PC_RESET_VALUE) \
 		$(SRC_cpu_trace); \
 	$(OBJ_DIR)/Vtb_cpu_trace $$trace_arg; \
 	if [ -n "$(PIPELINE_LOG)" ]; then \
@@ -315,6 +338,93 @@ asm-run:
 	if [ "$(TRACE)" = "1" ]; then \
 		echo "Waveform: $(OBJ_DIR)/cpu_trace.vcd"; \
 	fi
+
+asm-golden-run:
+	@set -euo pipefail; \
+	src="$(GOLDEN_ASM_SRC)"; \
+	name="$(GOLDEN_ASM_NAME)"; \
+	work_dir="$(GOLDEN_KEEP_DIR)"; \
+	raw_log="$(if $(SPIKE_RAW_LOG),$(SPIKE_RAW_LOG),$(GOLDEN_KEEP_DIR)/spike.raw.log)"; \
+	norm_log="$(if $(SPIKE_NORM_LOG),$(SPIKE_NORM_LOG),$(GOLDEN_KEEP_DIR)/spike.norm.log)"; \
+	pipe_log="$(if $(PIPELINE_LOG),$(PIPELINE_LOG),$(GOLDEN_KEEP_DIR)/pipeline.log)"; \
+	core_log="$(CORE_NORM_LOG)"; \
+	mkdir -p "$$work_dir"; \
+	echo "ASM golden build: $$src -> $$work_dir"; \
+	$(PYTHON) $(BUILD_RV32_ASM) \
+		--src "$$src" \
+		--out-dir "$$work_dir" \
+		--name "$$name" \
+		--cc "$(SW_CC)" \
+		--objcopy "$(SW_OBJCOPY)" \
+		--objdump "$(SW_OBJDUMP)" \
+		--linker "$(GOLDEN_LINKER)" \
+		--bin-to-hex "$(BIN_TO_HEX)" \
+		--split-hex "$(HEX_SPLIT)" \
+		--python "$(PYTHON)"; \
+	echo; \
+	echo "---- linked disassembly (first $(ASM_LINES) lines) ----"; \
+	sed -n '1,$(ASM_LINES)p' "$$work_dir/$$name.dump"; \
+	echo "---- spike golden ($(SPIKE_INSNS) instructions max) ----"; \
+	$(PYTHON) $(RUN_SPIKE_LOG) \
+		--elf "$$work_dir/$$name.elf" \
+		--raw-log "$$raw_log" \
+		--norm-log "$$norm_log" \
+		--spike "$(SPIKE)" \
+		--isa "$(SPIKE_ISA)" \
+		--priv "$(SPIKE_PRIV)" \
+		--instructions "$(SPIKE_INSNS)" \
+		--pc-base 0x80000000; \
+	echo "---- cpu trace ($(CYCLES) cycles max) ----"; \
+	trace_flags=""; \
+	trace_arg="+log=$$pipe_log"; \
+	if [ -n "$$core_log" ]; then \
+		mkdir -p "$$(dirname "$$core_log")"; \
+		trace_arg="$$trace_arg +commit_log=$$core_log"; \
+	fi; \
+	if [ "$(TRACE)" = "1" ]; then \
+		trace_flags="--trace"; \
+		trace_arg="$$trace_arg +trace"; \
+	fi; \
+	if [ "$(DETAIL)" = "1" ]; then \
+		trace_arg="$$trace_arg +detail"; \
+	fi; \
+	mkdir -p "$$(dirname "$$pipe_log")"; \
+	$(VERILATOR) $(VERILATOR_FLAGS) $$trace_flags \
+		--top-module tb_cpu_trace \
+		-GINIT_FILE=\"$$work_dir/$$name\" \
+		-GMAX_CYCLES=$(CYCLES) \
+		-GPC_RESET_VALUE=$(GOLDEN_PC_RESET_VALUE) \
+		-GCOMMIT_PC_BASE=$(GOLDEN_PC_RESET_VALUE) \
+		$(SRC_cpu_trace); \
+	$(OBJ_DIR)/Vtb_cpu_trace $$trace_arg; \
+	echo "Pipeline log: $$pipe_log"; \
+	echo "Spike raw log: $$raw_log"; \
+	echo "Spike normalized log: $$norm_log"; \
+	if [ -n "$$core_log" ]; then \
+		echo "Core normalized log: $$core_log"; \
+	fi; \
+	if [ "$(TRACE)" = "1" ]; then \
+		echo "Waveform: $(OBJ_DIR)/cpu_trace.vcd"; \
+	fi
+
+asm-diff-test:
+	@set -euo pipefail; \
+	raw_log="$(if $(SPIKE_RAW_LOG),$(SPIKE_RAW_LOG),$(GOLDEN_KEEP_DIR)/spike.raw.log)"; \
+	norm_log="$(if $(SPIKE_NORM_LOG),$(SPIKE_NORM_LOG),$(GOLDEN_KEEP_DIR)/spike.norm.log)"; \
+	pipe_log="$(if $(PIPELINE_LOG),$(PIPELINE_LOG),$(GOLDEN_KEEP_DIR)/pipeline.log)"; \
+	core_log="$(if $(CORE_NORM_LOG),$(CORE_NORM_LOG),$(GOLDEN_KEEP_DIR)/core.norm.log)"; \
+	diff_log="$(if $(DIFF_LOG),$(DIFF_LOG),$(GOLDEN_KEEP_DIR)/commit.diff)"; \
+	$(MAKE) --no-print-directory asm-golden-run \
+		SPIKE_RAW_LOG="$$raw_log" \
+		SPIKE_NORM_LOG="$$norm_log" \
+		PIPELINE_LOG="$$pipe_log" \
+		CORE_NORM_LOG="$$core_log"; \
+	echo "---- spike/core diff ----"; \
+	$(PYTHON) $(DIFF_COMMIT_LOGS) \
+		--spike-log "$$norm_log" \
+		--core-log "$$core_log" \
+		--diff-out "$$diff_log"; \
+	echo "Diff log: $$diff_log"
 
 build-%:
 	$(call check_test,$*)
@@ -343,6 +453,10 @@ help:
 	@echo "                       Build C, print disassembly, run top-level CPU trace"
 	@echo "  make asm-run ASM=file.S"
 	@echo "                       Build assembly, print disassembly, run CPU trace"
+	@echo "  make asm-golden-run ASM=file.S"
+	@echo "                       Build at 0x80000000, run Spike golden and CPU trace"
+	@echo "  make asm-diff-test ASM=file.S"
+	@echo "                       Diff Spike golden commit log against the core"
 	@echo "  make cpu-run CYCLES=40 TRACE=1"
 	@echo "                       Limit cycles and emit $(OBJ_DIR)/cpu_trace.vcd"
 	@echo "  make cpu-run PIPELINE_LOG=build/sw/trace.log"
@@ -354,13 +468,21 @@ help:
 	@echo "  PROG=name            Program base name in $(HEX_DIR) (default prog)"
 	@echo "  C_SRC=file.c         C source for sw-fetch (default $(C_SRC))"
 	@echo "  ASM_SRC=file.S       Assembly source for asm-run (default $(ASM_SRC))"
+	@echo "  GOLDEN_ASM_SRC=file.S"
+	@echo "                       Assembly source for asm-golden-run"
 	@echo "  SW_NAME=name         Artifact base name (default from C_SRC)"
 	@echo "  ASM_NAME=name        Artifact base name for asm-run"
+	@echo "  LINKER=file.ld       Linker for normal C/ASM runs (default $(LINKER))"
+	@echo "  GOLDEN_LINKER=file.ld"
+	@echo "                       Linker for Spike-compatible golden runs"
+	@echo "  SPIKE_INSNS=n        Max Spike instructions for golden log"
 	@echo "  KEEP=asm,hex,lanes   Keep C assembly, word hex, and lane hex"
 	@echo "  CYCLES=n             Max CPU trace cycles (default $(CYCLES))"
 	@echo "  TRACE=1              Enable Verilator VCD trace for cpu-run"
 	@echo "  DETAIL=1             Also print detailed per-cycle blocks to stdout"
 	@echo "  PIPELINE_LOG=file    Write detailed pipeline trace to file"
+	@echo "  CORE_NORM_LOG=file   Write normalized core commit log"
+	@echo "  DIFF_LOG=file        Write Spike/core diff output"
 	@echo
 	@echo "Registered tests:"
 	@printf '  %s\n' $(TESTS)

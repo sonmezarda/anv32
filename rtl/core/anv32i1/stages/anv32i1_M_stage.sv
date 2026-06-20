@@ -53,10 +53,10 @@ module anv32i1_M_stage
     end
 
     always_comb begin
-        load_byte = mem_rdata_i[8 * einstr_i.alu_result[1:0] +: 8];
-        load_half = mem_rdata_i[16 * einstr_i.alu_result[1] +: 16];
+        load_byte = mem_rdata_i[8 * minstr.alu_result[1:0] +: 8];
+        load_half = mem_rdata_i[16 * minstr.alu_result[1] +: 16];
 
-        unique case (einstr_i.op)
+        unique case (minstr.op)
             LB:      load_data = {{24{load_byte[7]}}, load_byte};
             LBU:     load_data = {24'b0, load_byte};
             LH:      load_data = {{16{load_half[15]}}, load_half};
@@ -72,6 +72,8 @@ module anv32i1_M_stage
         end else if(!stall_i) begin
             load_data_hold     <= load_data;
             minstr.valid       <= einstr_i.valid;
+            minstr.pc          <= einstr_i.pc;
+            minstr.instr       <= einstr_i.instr;
             minstr.link_pc     <= einstr_i.link_pc;
             minstr.alu_result  <= einstr_i.alu_result;
             minstr.rd_idx      <= einstr_i.rd_idx;

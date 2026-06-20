@@ -229,6 +229,41 @@ build/sw/add_test/add_test.dump
 
 `SW_NAME` verilmezse dosya adindan turetilir.
 
+## Spike Golden Diff Test
+
+Assembly programini 0x80000000 adresine linkleyip hem Spike hem de core
+uzerinde calistirmak ve commit loglarini karsilastirmak:
+
+```sh
+make asm-diff-test ASM=sw/examples/hazard_raw.S
+```
+
+Bu akis su dosyalari uretir:
+
+```text
+build/golden/asm/hazard_raw/spike.raw.log
+build/golden/asm/hazard_raw/spike.norm.log
+build/golden/asm/hazard_raw/core.norm.log
+build/golden/asm/hazard_raw/pipeline.log
+build/golden/asm/hazard_raw/commit.diff
+```
+
+`spike.norm.log` ve `core.norm.log` PC, instruction word ve register write
+event'leri uzerinden karsilastirilir. Spike'in mnemonic/alias yazimi diff'e
+dahil edilmez.
+
+Ornek JALR/flush testi:
+
+```sh
+make asm-diff-test ASM=sw/examples/hazard_auipc_jalr.S CYCLES=30 SPIKE_INSNS=30
+```
+
+Sadece golden + pipeline loglarini uretmek, diff calistirmamak icin:
+
+```sh
+make asm-golden-run ASM=sw/examples/hazard_raw.S CORE_NORM_LOG=build/golden/asm/hazard_raw/core.norm.log
+```
+
 ## Toolchain Ismini Degistirmek
 
 Toolchain isimleri sistemde farkliysa:

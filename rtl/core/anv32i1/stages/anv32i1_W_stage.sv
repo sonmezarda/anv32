@@ -13,8 +13,7 @@ module anv32i1_W_stage
     output logic [4:0]      rd_idx_o
 );
     logic [XLEN-1:0] result;
-    assign rd_wen_o = ~rst_i && ~stall_i && minstr_i.valid && minstr_i.rd_valid 
-                        && ~(minstr_i.wb_sel == WB_MEM);
+    assign rd_wen_o = ~rst_i && ~stall_i && minstr_i.valid && minstr_i.rd_valid;
 
     assign rd_idx_o = minstr_i.rd_idx;
     assign rd_wdata_o = result;

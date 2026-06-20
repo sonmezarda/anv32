@@ -12,10 +12,11 @@ module anv32i1_DE_stage
     input  logic    [XLEN-1:0] rs2_rdata_i, // from regfile
     output logic    [4:0]      rs1_idx_o,   // to regfile
     output logic    [4:0]      rs2_idx_o,   // to regfile
-    output einstr_t            einstr_o     // to mem + writeback
+    output einstr_t            einstr_o,    // to mem + writeback
+    output dinstr_t            dinstr_o     // for debug and hazard unit
 );
     dinstr_t dinstr;
-
+    assign dinstr_o = dinstr;
     logic [XLEN-1:0] alu_a, alu_b, alu_result;
     logic [XLEN-1:0] pc_plus4, pc_target;
     logic            branch_taken;
@@ -93,6 +94,7 @@ module anv32i1_DE_stage
             einstr_o.is_halt       <= dinstr.is_halt;
             einstr_o.pc            <= dinstr.pc;
             einstr_o.id            <= dinstr.id;
+            einstr_o.instr         <= dinstr.instr;
         end
     end
 endmodule

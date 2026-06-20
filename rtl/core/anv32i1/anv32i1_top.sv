@@ -28,6 +28,7 @@ module anv32i1_top
     finstr_t                finstr;
     einstr_t                einstr;
     minstr_t                minstr;
+    dinstr_t                dinstr;
 
     logic                   pc_jmp_en;
     logic [XLEN-1:0]        pc_jmp_addr;
@@ -44,6 +45,13 @@ module anv32i1_top
     logic [XLEN-1:0]        m_stage_dmem_addr_out;
 
     logic                   flush_DE;
+    fwd_sel_e               rs1_fwd_sel;
+    fwd_sel_e               rs2_fwd_sel;
+    logic [XLEN-1:0]        m_fwd_data;
+    logic [XLEN-1:0]        w_fwd_data;
+    logic [XLEN-1:0]        rs1_DE_din;
+    logic [XLEN-1:0]        rs2_DE_din;
+
     always_comb begin : pc_jump_comb
         pc_jmp_en   = einstr.branch_taken && einstr.valid && einstr.is_pc_changer;
         pc_jmp_addr = einstr.pc_target;
@@ -54,6 +62,13 @@ module anv32i1_top
         .rst_i(rst_i), 
         .stall_i(1'b0),
         .branch_taken_i(pc_jmp_en),
+        .dinstr_i(dinstr), // instr after decode 
+        .einstr_i(einstr), // instr after execute
+        .minstr_i(minstr),  // instr after mem stage
+        .stall_DE_o(stall_de),
+        .stall_F_o(stall_f),
+        .rs1_fwd_sel(rs1_fwd_sel),
+        .rs2_fwd_sel(rs2_fwd_sel),
         .flush_DE_o(flush_DE)
     );
     anv32i1_fetch_stage #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
@@ -67,17 +82,42 @@ module anv32i1_top
         .finstr_o(finstr)
     );
 
+    always_comb begin : m_fwd_data_comb
+        unique case (einstr.wb_sel)
+            WB_ALU:  m_fwd_data = einstr.alu_result;
+            WB_PC4:  m_fwd_data = einstr.link_pc;
+            default: m_fwd_data = '0;
+        endcase
+    end
+
+    assign w_fwd_data = rd_wdata;
+
+    always_comb begin : fwd_mux_comb
+        unique case (rs1_fwd_sel)
+            FWD_M:   rs1_DE_din = m_fwd_data;
+            FWD_W:   rs1_DE_din = w_fwd_data;
+            default: rs1_DE_din = rs1_rdata;
+        endcase
+
+        unique case (rs2_fwd_sel)
+            FWD_M:   rs2_DE_din = m_fwd_data;
+            FWD_W:   rs2_DE_din = w_fwd_data;
+            default: rs2_DE_din = rs2_rdata;
+        endcase
+    end
+
     anv32i1_DE_stage DE(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .flush_i(flush_DE),
         .stall_i(stall_de),
         .finstr_i(finstr),
-        .rs1_rdata_i(rs1_rdata),
-        .rs2_rdata_i(rs2_rdata),
+        .rs1_rdata_i(rs1_DE_din),
+        .rs2_rdata_i(rs2_DE_din),
         .rs1_idx_o(rs1_idx),
         .rs2_idx_o(rs2_idx),
-        .einstr_o(einstr)
+        .einstr_o(einstr),
+        .dinstr_o(dinstr)
     );
 
     anv32i1_M_stage M(
@@ -105,11 +145,13 @@ module anv32i1_top
         .rd_idx_o(rd_idx)
     );
 
-    assign pmem_addr = fetch_addr[11:2];
-    assign dmem_addr = m_stage_dmem_addr_out[11:2];
+    assign pmem_addr = fetch_addr[BRAM_ADDR_W+1:2];
+    assign dmem_addr = m_stage_dmem_addr_out[BRAM_ADDR_W+1:2];
     assign bram_instr = pmem_rdata;
     assign pmem_we = 4'b0;
     assign pmem_wdata = 32'b0;
+    assign stall_m = 1'b0;
+    assign stall_w = 1'b0;
 
     anv32_bram_tdp #(
         .ADDR_W(BRAM_ADDR_W), 
