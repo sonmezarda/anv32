@@ -26,6 +26,15 @@ SW_KEEP_DIR ?= build/sw/$(SW_NAME)
 ASM_SRC    ?= $(if $(ASM),$(ASM),sw/examples/hazard_jalr_raw.S)
 ASM_NAME   ?= $(basename $(notdir $(ASM_SRC)))
 ASM_KEEP_DIR ?= build/asm/$(ASM_NAME)
+FPGA_DIR   ?= fpga/gowin/anv32/src
+FPGA_PROG  ?= prog
+FPGA_FILE  ?= $(FILE)
+FPGA_C_SRC ?= $(if $(C),$(C),sw/fpga/led.c)
+FPGA_C_NAME ?= $(basename $(notdir $(FPGA_C_SRC)))
+FPGA_C_BUILD_DIR ?= build/fpga/c/$(FPGA_C_NAME)
+FPGA_ASM_SRC ?= $(if $(ASM),$(ASM),sw/fpga/led.S)
+FPGA_ASM_NAME ?= $(basename $(notdir $(FPGA_ASM_SRC)))
+FPGA_ASM_BUILD_DIR ?= build/fpga/asm/$(FPGA_ASM_NAME)
 GOLDEN_ASM_SRC ?= $(if $(ASM),$(ASM),sw/examples/hazard_auipc_jalr.S)
 GOLDEN_ASM_NAME ?= $(basename $(notdir $(GOLDEN_ASM_SRC)))
 GOLDEN_KEEP_DIR ?= build/golden/asm/$(GOLDEN_ASM_NAME)
@@ -177,7 +186,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run asm-run asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run asm-run fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -242,6 +251,77 @@ sw-fetch:
 	fi
 
 c-fetch c-run: sw-fetch
+
+fpga:
+	@set -euo pipefail; \
+	file="$(FPGA_FILE)"; \
+	if [ -z "$$file" ]; then \
+		$(MAKE) --no-print-directory fpga-c; \
+	else \
+		case "$$file" in \
+			*.c) \
+				$(MAKE) --no-print-directory fpga-c C="$$file"; \
+				;; \
+			*.S|*.s) \
+				$(MAKE) --no-print-directory fpga-asm ASM="$$file"; \
+				;; \
+			*) \
+				echo "Unsupported FPGA source '$$file'"; \
+				echo "Use .c, .S, or .s"; \
+				exit 2; \
+				;; \
+		esac; \
+	fi
+
+fpga-c:
+	@set -euo pipefail; \
+	src="$(FPGA_C_SRC)"; \
+	name="$(FPGA_C_NAME)"; \
+	work_dir="$(FPGA_C_BUILD_DIR)"; \
+	mkdir -p "$$work_dir" "$(FPGA_DIR)"; \
+	echo "FPGA C build: $$src -> $(FPGA_DIR)/$(FPGA_PROG)_lane[0-3].hex"; \
+	$(PYTHON) $(BUILD_RV32) \
+		--src "$$src" \
+		--out-dir "$$work_dir" \
+		--name "$$name" \
+		--cc "$(SW_CC)" \
+		--objcopy "$(SW_OBJCOPY)" \
+		--objdump "$(SW_OBJDUMP)" \
+		--linker "$(LINKER)" \
+		--bin-to-hex "$(BIN_TO_HEX)" \
+		--split-hex "$(HEX_SPLIT)" \
+		--python "$(PYTHON)"; \
+	cp "$$work_dir/$$name.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex"; \
+	for n in 0 1 2 3; do \
+		cp "$$work_dir/$${name}_lane$${n}.hex" "$(FPGA_DIR)/$(FPGA_PROG)_lane$${n}.hex"; \
+	done; \
+	echo "Wrote $(FPGA_DIR)/$(FPGA_PROG).hex and $(FPGA_DIR)/$(FPGA_PROG)_lane[0-3].hex"; \
+	echo "Disassembly: $$work_dir/$$name.dump"
+
+fpga-asm:
+	@set -euo pipefail; \
+	src="$(FPGA_ASM_SRC)"; \
+	name="$(FPGA_ASM_NAME)"; \
+	work_dir="$(FPGA_ASM_BUILD_DIR)"; \
+	mkdir -p "$$work_dir" "$(FPGA_DIR)"; \
+	echo "FPGA ASM build: $$src -> $(FPGA_DIR)/$(FPGA_PROG)_lane[0-3].hex"; \
+	$(PYTHON) $(BUILD_RV32_ASM) \
+		--src "$$src" \
+		--out-dir "$$work_dir" \
+		--name "$$name" \
+		--cc "$(SW_CC)" \
+		--objcopy "$(SW_OBJCOPY)" \
+		--objdump "$(SW_OBJDUMP)" \
+		--linker "$(LINKER)" \
+		--bin-to-hex "$(BIN_TO_HEX)" \
+		--split-hex "$(HEX_SPLIT)" \
+		--python "$(PYTHON)"; \
+	cp "$$work_dir/$$name.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex"; \
+	for n in 0 1 2 3; do \
+		cp "$$work_dir/$${name}_lane$${n}.hex" "$(FPGA_DIR)/$(FPGA_PROG)_lane$${n}.hex"; \
+	done; \
+	echo "Wrote $(FPGA_DIR)/$(FPGA_PROG).hex and $(FPGA_DIR)/$(FPGA_PROG)_lane[0-3].hex"; \
+	echo "Disassembly: $$work_dir/$$name.dump"
 
 cpu-run:
 	@set -euo pipefail; \
@@ -473,6 +553,12 @@ help:
 	@echo "                       Build C, print disassembly, run top-level CPU trace"
 	@echo "  make asm-run ASM=file.S"
 	@echo "                       Build assembly, print disassembly, run CPU trace"
+	@echo "  make fpga FILE=file.c"
+	@echo "                       Build C for Gowin BRAM image under $(FPGA_DIR)"
+	@echo "  make fpga FILE=file.S"
+	@echo "                       Build assembly for Gowin BRAM image"
+	@echo "  make fpga-c C=file.c / make fpga-asm ASM=file.S"
+	@echo "                       Explicit FPGA C/assembly build targets"
 	@echo "  make asm-golden-run ASM=file.S"
 	@echo "                       Build at 0x80000000, run Spike golden and CPU trace"
 	@echo "  make asm-diff-test ASM=file.S"
@@ -489,6 +575,8 @@ help:
 	@echo "  PROG=name            Program base name in $(HEX_DIR) (default prog)"
 	@echo "  C_SRC=file.c         C source for sw-fetch (default $(C_SRC))"
 	@echo "  ASM_SRC=file.S       Assembly source for asm-run (default $(ASM_SRC))"
+	@echo "  FILE=file.c|file.S   Source for make fpga"
+	@echo "  FPGA_PROG=name       Gowin BRAM image base in $(FPGA_DIR) (default prog)"
 	@echo "  GOLDEN_ASM_SRC=file.S"
 	@echo "                       Assembly source for asm-golden-run"
 	@echo "  SW_NAME=name         Artifact base name (default from C_SRC)"

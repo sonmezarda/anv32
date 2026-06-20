@@ -3,15 +3,24 @@ module anv32i1_top
     import anv32_isa_pkg::*;
 #(
     parameter logic [XLEN-1:0] PC_RESET_VALUE = RESET_PC,
-    parameter INIT_FILE = "./sim/data/fetch_test",
+    parameter INIT_FILE = "./sim/data/prog.hex",
     parameter BRAM_ADDR_W = 10
 )(
-    input  logic        clk_i, rst_i, stall_i, pc_jmp_en_i,
-    input  logic [31:0] pc_jmp_addr_i,
-    output logic [31:0] instr_o, pc_o,
-    output logic        instr_valid_o
+    input  logic            clk_i, rst_i, stall_i, pc_jmp_en_i,
+    input  logic [31:0]     pc_jmp_addr_i,
+    output logic [31:0]     instr_o, pc_o,
+    output logic            instr_valid_o,
+
+    input  logic [XLEN-1:0] mem_rdata_i,
+    output logic [XLEN-1:0] mem_wdata_o,
+    output logic [XLEN-1:0] mem_addr_o,
+    output logic [3:0]      mem_we
 );
     logic [XLEN-1:0] fetch_addr, bram_instr;
+
+    assign mem_wdata_o = dmem_wdata;
+    assign mem_addr_o  = m_stage_dmem_addr_out;
+    assign mem_we      = dmem_we;
 
     logic [BRAM_ADDR_W-1:0] dmem_addr;
     logic [XLEN-1:0]        dmem_wdata;
@@ -29,6 +38,10 @@ module anv32i1_top
     einstr_t                einstr;
     minstr_t                minstr;
     dinstr_t                dinstr;
+
+    assign instr_o       = finstr.instr;
+    assign pc_o          = finstr.pc;
+    assign instr_valid_o = finstr.valid;
 
     logic                   pc_jmp_en;
     logic [XLEN-1:0]        pc_jmp_addr;
