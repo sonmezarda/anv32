@@ -42,11 +42,20 @@ module anv32i1_top
     
     logic [XLEN-1:0]        m_stage_mem_out;
     logic [XLEN-1:0]        m_stage_dmem_addr_out;
+
+    logic                   flush_DE;
     always_comb begin : pc_jump_comb
         pc_jmp_en   = einstr.branch_taken && einstr.valid && einstr.is_pc_changer;
         pc_jmp_addr = einstr.pc_target;
     end
 
+    anv32i1_hazard_unit hazard_unit(
+        .clk_i(clk_i), 
+        .rst_i(rst_i), 
+        .stall_i(1'b0),
+        .branch_taken_i(pc_jmp_en),
+        .flush_DE_o(flush_DE)
+    );
     anv32i1_fetch_stage #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
         .clk_i(clk_i), 
         .rst_i(rst_i), 
@@ -61,6 +70,7 @@ module anv32i1_top
     anv32i1_DE_stage DE(
         .clk_i(clk_i),
         .rst_i(rst_i),
+        .flush_i(flush_DE),
         .stall_i(stall_de),
         .finstr_i(finstr),
         .rs1_rdata_i(rs1_rdata),
@@ -100,7 +110,7 @@ module anv32i1_top
     assign bram_instr = pmem_rdata;
     assign pmem_we = 4'b0;
     assign pmem_wdata = 32'b0;
-    
+
     anv32_bram_tdp #(
         .ADDR_W(BRAM_ADDR_W), 
         .INIT_FILE(INIT_FILE)) prog_mem (

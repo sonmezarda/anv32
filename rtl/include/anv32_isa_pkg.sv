@@ -95,6 +95,12 @@ package anv32_isa_pkg;
         ALU_XOR, ALU_SRL, ALU_SRA, ALU_OR,  ALU_AND
     } alu_op_e;
 
+    typedef enum logic [1:0] {
+        FWD_REG = 2'b00,
+        FWD_M   = 2'b01,
+        FWD_W   = 2'b10
+    } fwd_sel_e; // forwarding selection
+
     // --- ALU A operandı ---
     typedef enum logic [1:0] { A_RS1, A_PC, A_ZERO } a_sel_e;
 

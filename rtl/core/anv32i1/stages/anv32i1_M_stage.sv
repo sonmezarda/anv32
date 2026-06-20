@@ -77,6 +77,7 @@ module anv32i1_M_stage
             minstr.rd_idx      <= einstr_i.rd_idx;
             minstr.rd_valid    <= einstr_i.rd_valid;
             minstr.wb_sel      <= einstr_i.wb_sel;
+            minstr.op          <= einstr_i.op;
         end
     end
 

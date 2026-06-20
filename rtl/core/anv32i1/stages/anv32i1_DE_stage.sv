@@ -5,6 +5,7 @@ module anv32i1_DE_stage
     input  logic               clk_i,
     input  logic               rst_i,
     input  logic               stall_i,
+    input  logic               flush_i,
 
     input  finstr_t            finstr_i,    // from fetch
     input  logic    [XLEN-1:0] rs1_rdata_i, // from regfile
@@ -44,6 +45,7 @@ module anv32i1_DE_stage
     // --- branch comparator ---
     always_comb begin : branch_taken_comb
         unique case (dinstr.op)
+            JAL, JALR: branch_taken = 1'b1;
             BEQ:  branch_taken = (rs1_rdata_i == rs2_rdata_i);
             BNE:  branch_taken = (rs1_rdata_i != rs2_rdata_i);
             BLT:  branch_taken = ($signed(rs1_rdata_i) <  $signed(rs2_rdata_i));
@@ -71,6 +73,8 @@ module anv32i1_DE_stage
     // --- DE/MEM pipeline register ---
     always_ff @(posedge clk_i) begin
         if (rst_i) begin
+            einstr_o <= '0;
+        end else if (flush_i) begin
             einstr_o <= '0;
         end else if (!stall_i) begin
             einstr_o.valid         <= finstr_i.valid && dinstr.valid;
