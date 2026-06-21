@@ -8,7 +8,8 @@
         <File path="../../../rtl/common/mem/anv32_bram_tdp.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/anv32i1_hazard_unit.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/anv32i1_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/anv32i1/stages/anv32i1_DE_stage.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32i1/stages/anv32i1_D_stage.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32i1/stages/anv32i1_E_stage.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/stages/anv32i1_M_stage.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/stages/anv32i1_W_stage.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv" type="file.verilog" enable="1"/>

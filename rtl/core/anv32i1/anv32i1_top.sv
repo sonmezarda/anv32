@@ -27,12 +27,13 @@ module anv32i1_top
     logic [XLEN-1:0]        dmem_wdata;
     logic [3:0]             dmem_we;
 
-    logic                   stall_f, stall_de, stall_m, stall_w;
+    logic                   stall_f, stall_de, stall_e, stall_m, stall_w;
 
     finstr_t                finstr;
     einstr_t                einstr;
     minstr_t                minstr;
     dinstr_t                dinstr;
+    dinstr_t                dinstr_decode;
 
     assign instr_o       = finstr.instr;
     assign pc_o          = finstr.pc;
@@ -57,33 +58,43 @@ module anv32i1_top
     fwd_sel_e               rs2_fwd_sel;
     logic                   stall_f_eff;
     logic                   stall_de_eff;
+    logic                   stall_e_eff;
     logic                   stall_m_eff;
     logic                   stall_w_eff;
     logic [XLEN-1:0]        m_fwd_data;
     logic [XLEN-1:0]        w_fwd_data;
-    logic [XLEN-1:0]        rs1_DE_din;
-    logic [XLEN-1:0]        rs2_DE_din;
+    logic [XLEN-1:0]        rs1_D_din;
+    logic [XLEN-1:0]        rs2_D_din;
+    logic [XLEN-1:0]        rs1_E_din;
+    logic [XLEN-1:0]        rs2_E_din;
     logic [11:0]            csr_addr;
     logic [XLEN-1:0]        csr_rdata;
-    logic [XLEN-1:0]        csr_rdata_DE;
+    logic [XLEN-1:0]        csr_rdata_D;
+    logic [XLEN-1:0]        csr_rdata_E;
     logic                   csr_we;
     logic [11:0]            csr_waddr;
     logic [XLEN-1:0]        csr_wdata;
     logic [XLEN-1:0]        mtvec;
     logic [XLEN-1:0]        mepc;
+    logic                   e_branch_taken;
+    logic [XLEN-1:0]        e_pc_target;
+    logic                   e_pc_changer;
+    logic                   e_valid;
 
     always_comb begin : pc_jump_comb
         if (pc_jmp_en_i) begin
             pc_jmp_en   = 1'b1;
             pc_jmp_addr = pc_jmp_addr_i;
         end else begin
-            pc_jmp_en   = einstr.branch_taken && einstr.valid && einstr.is_pc_changer;
-            pc_jmp_addr = einstr.pc_target;
+            pc_jmp_en   = e_branch_taken && e_valid && e_pc_changer;
+            pc_jmp_addr = e_pc_target;
         end
     end
 
     assign stall_f_eff  = stall_i || stall_f;
     assign stall_de_eff = stall_i || stall_de;
+    assign stall_e      = 1'b0;
+    assign stall_e_eff  = stall_i || stall_e;
     assign stall_m_eff  = stall_i;
     assign stall_w_eff  = stall_i;
 
@@ -92,9 +103,10 @@ module anv32i1_top
         .rst_i(rst_i), 
         .stall_i(1'b0),
         .branch_taken_i(pc_jmp_en),
-        .dinstr_i(dinstr), // instr after decode 
-        .einstr_i(einstr), // instr after execute
-        .minstr_i(minstr),  // instr after mem stage
+        .dinstr_d_i(dinstr_decode), // instr currently in decode
+        .dinstr_e_i(dinstr),        // instr currently in execute
+        .einstr_i(einstr),          // instr after execute
+        .minstr_i(minstr),          // instr after mem stage
         .stall_DE_o(stall_de),
         .stall_F_o(stall_f),
         .rs1_fwd_sel(rs1_fwd_sel),
@@ -122,46 +134,85 @@ module anv32i1_top
 
     assign w_fwd_data = rd_wdata;
 
-    always_comb begin : fwd_mux_comb
-        unique case (rs1_fwd_sel)
-            FWD_M:   rs1_DE_din = m_fwd_data;
-            FWD_W:   rs1_DE_din = w_fwd_data;
-            default: rs1_DE_din = rs1_rdata;
-        endcase
-
-        unique case (rs2_fwd_sel)
-            FWD_M:   rs2_DE_din = m_fwd_data;
-            FWD_W:   rs2_DE_din = w_fwd_data;
-            default: rs2_DE_din = rs2_rdata;
-        endcase
-    end
-
-    always_comb begin : csr_fwd_comb
-        if (einstr.valid && einstr.is_csr && einstr.csr_we &&
-            einstr.csr_addr == csr_addr) begin
-            csr_rdata_DE = einstr.csr_wdata;
-        end else if (minstr.valid && minstr.is_csr && minstr.csr_we &&
-            minstr.csr_addr == csr_addr) begin
-            csr_rdata_DE = minstr.csr_wdata;
+    always_comb begin : d_bypass_mux_comb
+        if (minstr.valid && minstr.rd_valid && minstr.rd_idx != 5'd0 &&
+            minstr.rd_idx == rs1_idx) begin
+            rs1_D_din = w_fwd_data;
         end else begin
-            csr_rdata_DE = csr_rdata;
+            rs1_D_din = rs1_rdata;
+        end
+
+        if (minstr.valid && minstr.rd_valid && minstr.rd_idx != 5'd0 &&
+            minstr.rd_idx == rs2_idx) begin
+            rs2_D_din = w_fwd_data;
+        end else begin
+            rs2_D_din = rs2_rdata;
         end
     end
 
-    anv32i1_DE_stage DE(
+    always_comb begin : e_fwd_mux_comb
+        unique case (rs1_fwd_sel)
+            FWD_M:   rs1_E_din = m_fwd_data;
+            FWD_W:   rs1_E_din = w_fwd_data;
+            default: rs1_E_din = dinstr.rs1_rdata;
+        endcase
+
+        unique case (rs2_fwd_sel)
+            FWD_M:   rs2_E_din = m_fwd_data;
+            FWD_W:   rs2_E_din = w_fwd_data;
+            default: rs2_E_din = dinstr.rs2_rdata;
+        endcase
+    end
+
+    always_comb begin : csr_d_bypass_comb
+        if (csr_we && csr_waddr == csr_addr) begin
+            csr_rdata_D = csr_wdata;
+        end else begin
+            csr_rdata_D = csr_rdata;
+        end
+    end
+
+    always_comb begin : csr_e_fwd_comb
+        if (einstr.valid && einstr.is_csr && einstr.csr_we &&
+            einstr.csr_addr == dinstr.csr_addr) begin
+            csr_rdata_E = einstr.csr_wdata;
+        end else if (minstr.valid && minstr.is_csr && minstr.csr_we &&
+            minstr.csr_addr == dinstr.csr_addr) begin
+            csr_rdata_E = minstr.csr_wdata;
+        end else begin
+            csr_rdata_E = dinstr.csr_rdata;
+        end
+    end
+
+    anv32i1_D_stage D(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .flush_i(flush_DE),
         .stall_i(stall_de_eff),
         .finstr_i(finstr),
-        .rs1_rdata_i(rs1_DE_din),
-        .rs2_rdata_i(rs2_DE_din),
-        .csr_rdata_i(csr_rdata_DE),
+        .rs1_rdata_i(rs1_D_din),
+        .rs2_rdata_i(rs2_D_din),
+        .csr_rdata_i(csr_rdata_D),
         .rs1_idx_o(rs1_idx),
         .rs2_idx_o(rs2_idx),
         .csr_addr_o(csr_addr),
-        .einstr_o(einstr),
+        .dinstr_decode_o(dinstr_decode),
         .dinstr_o(dinstr)
+    );
+
+    anv32i1_E_stage E(
+        .clk_i(clk_i),
+        .rst_i(rst_i),
+        .stall_i(stall_e_eff),
+        .dinstr_i(dinstr),
+        .rs1_rdata_i(rs1_E_din),
+        .rs2_rdata_i(rs2_E_din),
+        .csr_rdata_i(csr_rdata_E),
+        .branch_taken_o(e_branch_taken),
+        .pc_target_o(e_pc_target),
+        .pc_changer_o(e_pc_changer),
+        .valid_o(e_valid),
+        .einstr_o(einstr)
     );
 
     anv32i1_M_stage M(

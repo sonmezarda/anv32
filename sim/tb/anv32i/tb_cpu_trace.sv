@@ -221,8 +221,8 @@ module tb_cpu_trace
             if_s = "bubble";
         end
 
-        if (dut.finstr.valid && dut.DE.dinstr.valid) begin
-            de_s = $sformatf("%s %-7s", hex32(dut.DE.dinstr.pc), op_name(dut.DE.dinstr.op));
+        if (dut.dinstr_decode.valid) begin
+            de_s = $sformatf("%s %-7s", hex32(dut.dinstr_decode.pc), op_name(dut.dinstr_decode.op));
         end else begin
             de_s = "bubble";
         end
@@ -303,25 +303,25 @@ module tb_cpu_trace
             emit_detail("  IF(fetch): bubble");
         end
 
-        if (dut.finstr.valid && dut.DE.dinstr.valid) begin
+        if (dut.dinstr_decode.valid) begin
             emit_detail($sformatf("  DE.in:     pc=%s op=%-7s rd=x%-2d rdv=%0b wb=%s imm=%s",
-                                  hex32(dut.DE.dinstr.pc),
-                                  op_name(dut.DE.dinstr.op),
-                                  dut.DE.dinstr.rd_idx,
-                                  dut.DE.dinstr.rd_valid,
-                                  wb_name(dut.DE.dinstr.wb_sel),
-                                  hex32(dut.DE.dinstr.imm)));
+                                  hex32(dut.dinstr_decode.pc),
+                                  op_name(dut.dinstr_decode.op),
+                                  dut.dinstr_decode.rd_idx,
+                                  dut.dinstr_decode.rd_valid,
+                                  wb_name(dut.dinstr_decode.wb_sel),
+                                  hex32(dut.dinstr_decode.imm)));
             emit_detail($sformatf("             rs1=x%-2d need=%0b rf=%s fwd=%s val=%s | rs2=x%-2d need=%0b rf=%s fwd=%s val=%s",
-                                  dut.DE.dinstr.rs1_idx,
-                                  dut.DE.dinstr.rs1_valid,
+                                  dut.dinstr_decode.rs1_idx,
+                                  dut.dinstr_decode.rs1_valid,
                                   hex32(dut.rs1_rdata),
                                   fwd_name(dut.rs1_fwd_sel),
-                                  hex32(dut.rs1_DE_din),
-                                  dut.DE.dinstr.rs2_idx,
-                                  dut.DE.dinstr.rs2_valid,
+                                  hex32(dut.rs1_D_din),
+                                  dut.dinstr_decode.rs2_idx,
+                                  dut.dinstr_decode.rs2_valid,
                                   hex32(dut.rs2_rdata),
                                   fwd_name(dut.rs2_fwd_sel),
-                                  hex32(dut.rs2_DE_din)));
+                                  hex32(dut.rs2_D_din)));
         end else begin
             emit_detail("  DE.in:     bubble");
         end

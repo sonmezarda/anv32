@@ -28,12 +28,17 @@ module anv32i1_DE_stage_tb
 
     // ---------------- DUT I/O ----------------------------------------------
     finstr_t           finstr;
-    einstr_t           einstr;
+    dinstr_t           dinstr_decode;
     dinstr_t           dinstr;
+    einstr_t           einstr;
     logic [4:0]        rs1_idx, rs2_idx;
     logic [11:0]       csr_addr;
     logic [XLEN-1:0]   rs1_rdata, rs2_rdata;
     logic [XLEN-1:0]   csr_rdata = 32'hCAFE_BABE;
+    logic              branch_taken;
+    logic [XLEN-1:0]   pc_target;
+    logic              pc_changer;
+    logic              e_valid;
 
     // ---------------- behavioural register file (async read) ---------------
     logic [XLEN-1:0] xreg [0:31];
@@ -41,7 +46,7 @@ module anv32i1_DE_stage_tb
     assign rs2_rdata = (rs2_idx == 5'd0) ? '0 : xreg[rs2_idx];
 
     // ---------------- DUT ---------------------------------------------------
-    anv32i1_DE_stage dut (
+    anv32i1_D_stage d_stage (
         .clk_i      (clk),
         .rst_i      (rst),
         .stall_i    (stall),
@@ -53,8 +58,23 @@ module anv32i1_DE_stage_tb
         .rs1_idx_o  (rs1_idx),
         .rs2_idx_o  (rs2_idx),
         .csr_addr_o (csr_addr),
-        .einstr_o   (einstr),
+        .dinstr_decode_o(dinstr_decode),
         .dinstr_o   (dinstr)
+    );
+
+    anv32i1_E_stage e_stage (
+        .clk_i          (clk),
+        .rst_i          (rst),
+        .stall_i        (1'b0),
+        .dinstr_i       (dinstr),
+        .rs1_rdata_i    (dinstr.rs1_rdata),
+        .rs2_rdata_i    (dinstr.rs2_rdata),
+        .csr_rdata_i    (dinstr.csr_rdata),
+        .branch_taken_o (branch_taken),
+        .pc_target_o    (pc_target),
+        .pc_changer_o   (pc_changer),
+        .valid_o        (e_valid),
+        .einstr_o       (einstr)
     );
 
     // =======================================================================
@@ -135,7 +155,10 @@ module anv32i1_DE_stage_tb
         finstr.instr = instr;
         finstr.pc    = pc;
         stall        = 1'b0;
-        @(posedge clk);   // register capture
+        @(posedge clk);   // D register capture
+        #1;
+        finstr.valid = 1'b0;
+        @(posedge clk);   // E register capture
         #1;               // let NBA update settle
     endtask
 

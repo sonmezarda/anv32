@@ -7,9 +7,10 @@ module anv32i1_hazard_unit
     input  logic stall_i,
 
     input  logic branch_taken_i,
-    input  dinstr_t dinstr_i, // instr after decode 
-    input  einstr_t einstr_i, // instr after execute
-    input  minstr_t minstr_i,  // instr after mem stage
+    input  dinstr_t dinstr_d_i, // instr currently in decode
+    input  dinstr_t dinstr_e_i, // instr currently in execute
+    input  einstr_t einstr_i,   // instr after execute
+    input  minstr_t minstr_i,   // instr after mem stage
     
     output logic flush_DE_o,
     output logic stall_DE_o,
@@ -20,39 +21,57 @@ module anv32i1_hazard_unit
     // output logic flush_M_o
 );
     assign flush_DE_o = branch_taken_i;
-    logic drs1_need_m, drs2_need_m;
-    logic drs1_need_wb, drs2_need_wb;
-    assign drs1_need_m =
-        dinstr_i.valid &&
-        einstr_i.valid &&
-        dinstr_i.rs1_valid &&
-        einstr_i.rd_valid &&
-        (dinstr_i.rs1_idx != 5'd0) &&
-        (dinstr_i.rs1_idx == einstr_i.rd_idx);
+    logic drs1_need_e, drs2_need_e;
+    logic ers1_need_m, ers2_need_m;
+    logic ers1_need_wb, ers2_need_wb;
 
-    assign drs2_need_m =
-        dinstr_i.valid &&
-        einstr_i.valid &&
-        dinstr_i.rs2_valid &&
-        einstr_i.rd_valid &&
-        (dinstr_i.rs2_idx != 5'd0) &&
-        (dinstr_i.rs2_idx == einstr_i.rd_idx);
+    assign drs1_need_e =
+        dinstr_d_i.valid &&
+        dinstr_e_i.valid &&
+        dinstr_d_i.rs1_valid &&
+        dinstr_e_i.rd_valid &&
+        (dinstr_d_i.rs1_idx != 5'd0) &&
+        (dinstr_d_i.rs1_idx == dinstr_e_i.rd_idx);
 
-    assign drs1_need_wb =
-        dinstr_i.valid &&
-        dinstr_i.rs1_valid &&
+    assign drs2_need_e =
+        dinstr_d_i.valid &&
+        dinstr_e_i.valid &&
+        dinstr_d_i.rs2_valid &&
+        dinstr_e_i.rd_valid &&
+        (dinstr_d_i.rs2_idx != 5'd0) &&
+        (dinstr_d_i.rs2_idx == dinstr_e_i.rd_idx);
+
+    assign ers1_need_m =
+        dinstr_e_i.valid &&
+        einstr_i.valid &&
+        dinstr_e_i.rs1_valid &&
+        einstr_i.rd_valid &&
+        (dinstr_e_i.rs1_idx != 5'd0) &&
+        (dinstr_e_i.rs1_idx == einstr_i.rd_idx);
+
+    assign ers2_need_m =
+        dinstr_e_i.valid &&
+        einstr_i.valid &&
+        dinstr_e_i.rs2_valid &&
+        einstr_i.rd_valid &&
+        (dinstr_e_i.rs2_idx != 5'd0) &&
+        (dinstr_e_i.rs2_idx == einstr_i.rd_idx);
+
+    assign ers1_need_wb =
+        dinstr_e_i.valid &&
+        dinstr_e_i.rs1_valid &&
         minstr_i.valid &&
         minstr_i.rd_valid &&
-        (dinstr_i.rs1_idx != 5'd0) &&
-        (dinstr_i.rs1_idx == minstr_i.rd_idx);
+        (dinstr_e_i.rs1_idx != 5'd0) &&
+        (dinstr_e_i.rs1_idx == minstr_i.rd_idx);
 
-    assign drs2_need_wb =
-        dinstr_i.valid &&
-        dinstr_i.rs2_valid &&
+    assign ers2_need_wb =
+        dinstr_e_i.valid &&
+        dinstr_e_i.rs2_valid &&
         minstr_i.valid &&
         minstr_i.rd_valid &&
-        (dinstr_i.rs2_idx != 5'd0) &&
-        (dinstr_i.rs2_idx == minstr_i.rd_idx);
+        (dinstr_e_i.rs2_idx != 5'd0) &&
+        (dinstr_e_i.rs2_idx == minstr_i.rd_idx);
 
     always_comb begin : ld_RAW_hazard_comb
         stall_DE_o  = 1'b0;
@@ -60,25 +79,20 @@ module anv32i1_hazard_unit
         rs1_fwd_sel = FWD_REG;
         rs2_fwd_sel = FWD_REG;
 
-        if (drs1_need_m) begin
-            if (einstr_i.wb_sel == WB_MEM) begin
-                stall_DE_o = 1'b1;
-                stall_F_o  = 1'b1;
-            end else begin
-                rs1_fwd_sel = FWD_M;
-            end
-        end else if (drs1_need_wb) begin
+        if ((drs1_need_e || drs2_need_e) && dinstr_e_i.wb_sel == WB_MEM) begin
+            stall_DE_o = 1'b1;
+            stall_F_o  = 1'b1;
+        end
+
+        if (ers1_need_m && einstr_i.wb_sel != WB_MEM) begin
+            rs1_fwd_sel = FWD_M;
+        end else if (ers1_need_wb) begin
             rs1_fwd_sel = FWD_W;
         end
 
-        if (drs2_need_m) begin
-            if (einstr_i.wb_sel == WB_MEM) begin
-                stall_DE_o = 1'b1;
-                stall_F_o  = 1'b1;
-            end else begin
-                rs2_fwd_sel = FWD_M;
-            end
-        end else if (drs2_need_wb) begin
+        if (ers2_need_m && einstr_i.wb_sel != WB_MEM) begin
+            rs2_fwd_sel = FWD_M;
+        end else if (ers2_need_wb) begin
             rs2_fwd_sel = FWD_W;
         end
     end

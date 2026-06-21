@@ -151,6 +151,8 @@ package anv32_isa_pkg;
         logic            rd_valid;      // is rd valid (rd will be written)
         logic            rs1_valid;     // is rs1 valid
         logic            rs2_valid;     // is rs2 valid
+        logic [XLEN-1:0] rs1_rdata;     // D/E latched operand
+        logic [XLEN-1:0] rs2_rdata;     // D/E latched operand
 
         logic [XLEN-1:0] imm;           // extracted immediate
         logic            imm_valid;     // is imm valid
@@ -167,6 +169,7 @@ package anv32_isa_pkg;
         logic            csr_imm;       // use instr[19:15] as zimm instead of rs1
         csr_op_e         csr_op;        // RW/RS/RC semantic
         logic [11:0]     csr_addr;      // instr[31:20]
+        logic [XLEN-1:0] csr_rdata;     // D/E latched CSR read data
         logic            is_halt;       // EBREAK -> sim-stop
     } dinstr_t;
 

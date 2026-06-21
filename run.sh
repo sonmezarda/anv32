@@ -8,7 +8,8 @@ verilator --lint-only --timing \
     rtl/core/common/anv32_alu.sv \
     rtl/core/common/anv32_regfile.sv\
     rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
-    rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
+    rtl/core/anv32i1/stages/anv32i1_D_stage.sv \
+    rtl/core/anv32i1/stages/anv32i1_E_stage.sv \
     rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
     rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
     rtl/core/anv32i1/anv32i1_top.sv \
