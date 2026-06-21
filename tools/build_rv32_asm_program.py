@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a freestanding RV32I assembly program and emit sim memory images."""
+"""Build a freestanding RV32 assembly program and emit sim memory images."""
 
 import argparse
 import subprocess
@@ -19,6 +19,8 @@ def main():
     parser.add_argument("--name", required=True, help="artifact base name")
     parser.add_argument("--linker", default="sw/common/link.ld")
     parser.add_argument("--cc", default="riscv64-unknown-elf-gcc")
+    parser.add_argument("--march", default="rv32i_zicsr")
+    parser.add_argument("--mabi", default="ilp32")
     parser.add_argument("--objcopy", default="riscv64-unknown-elf-objcopy")
     parser.add_argument("--objdump", default="riscv64-unknown-elf-objdump")
     parser.add_argument("--bin-to-hex", default="tools/bin_to_hex.py")
@@ -39,8 +41,8 @@ def main():
     map_file = base.with_suffix(".map")
 
     common_flags = [
-        "-march=rv32i",
-        "-mabi=ilp32",
+        f"-march={args.march}",
+        f"-mabi={args.mabi}",
         "-ffreestanding",
         "-fno-pic",
         "-fno-pie",

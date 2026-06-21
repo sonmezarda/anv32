@@ -81,7 +81,20 @@ package anv32_isa_pkg;
     localparam logic [11:0] CSR_MCAUSE  = 12'h342;
     localparam logic [11:0] CSR_MTVAL   = 12'h343;
     localparam logic [11:0] CSR_MIP     = 12'h344;
-    
+
+    // Machine-mode interrupt/CSR bit definitions
+    localparam logic [XLEN-1:0] MCAUSE_MACHINE_EXTERNAL_IRQ = {1'b1, 31'd11};
+
+    localparam int unsigned MSTATUS_MIE_BIT  = 3;      // Machine Interrupt Enable
+    localparam int unsigned MSTATUS_MPIE_BIT = 7;      // Machine Previous Interrupt Enable
+    localparam int unsigned MSTATUS_MPP_LSB  = 11;     // Machine Previous Privilege
+    localparam int unsigned MSTATUS_MPP_MSB  = 12;
+
+    localparam int unsigned MIE_MEIE_BIT = 11;         // Machine External Interrupt Enable
+    localparam int unsigned MIP_MEIP_BIT = 11;         // Machine External Interrupt Pending
+
+    localparam logic [1:0] PRIV_U = 2'b00;
+    localparam logic [1:0] PRIV_M = 2'b11;
 
     // internal micro-op
     typedef enum logic [5:0] {

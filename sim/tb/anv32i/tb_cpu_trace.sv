@@ -40,6 +40,7 @@ module tb_cpu_trace
         .stall_i(1'b0),
         .pc_jmp_en_i(1'b0),
         .pc_jmp_addr_i('0),
+        .ext_irq_i(1'b0),
         .pc_o(pc_o),
         .instr_o(instr_o),
         .instr_valid_o(instr_valid_o),

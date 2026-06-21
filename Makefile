@@ -19,6 +19,8 @@ TEST      ?= de
 SW_CC      ?= riscv64-unknown-elf-gcc
 SW_OBJCOPY ?= riscv64-unknown-elf-objcopy
 SW_OBJDUMP ?= riscv64-unknown-elf-objdump
+SW_ARCH    ?= rv32i_zicsr
+SW_ABI     ?= ilp32
 SPIKE      ?= spike
 C_SRC      ?= $(if $(C),$(C),sw/examples/smoke.c)
 SW_NAME    ?= $(basename $(notdir $(C_SRC)))
@@ -241,6 +243,8 @@ sw-fetch:
 		--out-dir "$$work_dir" \
 		--name "$$name" \
 		--cc "$(SW_CC)" \
+		--march "$(SW_ARCH)" \
+		--mabi "$(SW_ABI)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
 		--linker "$(LINKER)" \
@@ -310,6 +314,8 @@ fpga-c:
 		--out-dir "$$work_dir" \
 		--name "$$name" \
 		--cc "$(SW_CC)" \
+		--march "$(SW_ARCH)" \
+		--mabi "$(SW_ABI)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
 		--linker "$(LINKER)" \
@@ -335,6 +341,8 @@ fpga-asm:
 		--out-dir "$$work_dir" \
 		--name "$$name" \
 		--cc "$(SW_CC)" \
+		--march "$(SW_ARCH)" \
+		--mabi "$(SW_ABI)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
 		--linker "$(LINKER)" \
@@ -360,6 +368,8 @@ cpu-run:
 		--out-dir "$$work_dir" \
 		--name "$$name" \
 		--cc "$(SW_CC)" \
+		--march "$(SW_ARCH)" \
+		--mabi "$(SW_ABI)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
 		--linker "$(LINKER)" \
@@ -413,6 +423,8 @@ asm-run:
 		--out-dir "$$work_dir" \
 		--name "$$name" \
 		--cc "$(SW_CC)" \
+		--march "$(SW_ARCH)" \
+		--mabi "$(SW_ABI)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
 		--linker "$(LINKER)" \
@@ -470,6 +482,8 @@ asm-golden-run:
 		--out-dir "$$work_dir" \
 		--name "$$name" \
 		--cc "$(SW_CC)" \
+		--march "$(SW_ARCH)" \
+		--mabi "$(SW_ABI)" \
 		--objcopy "$(SW_OBJCOPY)" \
 		--objdump "$(SW_OBJDUMP)" \
 		--linker "$(GOLDEN_LINKER)" \

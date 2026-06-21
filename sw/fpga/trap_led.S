@@ -3,17 +3,6 @@
     .type _start, @function
 
 #define LED_BASE    0x10000
-#define CSR_MTVEC   0x305
-#define CSR_MEPC    0x341
-#define CSR_MCAUSE  0x342
-
-#define CSR_INSN(csr, rs1, f3, rd) \
-    .word (((csr) << 20) | ((rs1) << 15) | ((f3) << 12) | ((rd) << 7) | 0x73)
-
-#define CSRRW(rd, csr, rs1) CSR_INSN(csr, rs1, 0x1, rd)
-#define CSRRS(rd, csr, rs1) CSR_INSN(csr, rs1, 0x2, rd)
-#define CSRR(rd, csr)       CSRRS(rd, csr, 0)
-#define MRET                .word 0x30200073
 
 _start:
     lui   s1, LED_BASE       # LED MMIO base: 0x1000_0000
@@ -21,7 +10,7 @@ _start:
 
     lui   t0, %hi(trap_handler)
     addi  t0, t0, %lo(trap_handler)
-    CSRRW(0, CSR_MTVEC, 5)
+    csrw  mtvec, t0
 
     ecall
     addi  t0, zero, 1
@@ -58,7 +47,7 @@ fail_loop:
     jal   zero, fail_loop
 
 trap_handler:
-    CSRR(5, CSR_MCAUSE)
+    csrr  t0, mcause
 
     addi  t1, zero, 11
     beq   t0, t1, handle_ecall
@@ -76,10 +65,10 @@ handle_illegal:
     ori   s0, s0, 2
 
 trap_resume:
-    CSRR(7, CSR_MEPC)
+    csrr  t2, mepc
     addi  t2, t2, 4
-    CSRRW(0, CSR_MEPC, 7)
-    MRET
+    csrw  mepc, t2
+    mret
 
 delay:
     lui   t2, 0x800

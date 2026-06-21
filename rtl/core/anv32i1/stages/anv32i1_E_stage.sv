@@ -5,6 +5,7 @@ module anv32i1_E_stage
     input  logic               clk_i,
     input  logic               rst_i,
     input  logic               stall_i,
+    input  logic               kill_i,
 
     input  dinstr_t            dinstr_i,
     input  logic    [XLEN-1:0] rs1_rdata_i,
@@ -90,7 +91,7 @@ module anv32i1_E_stage
     assign valid_o        = dinstr_i.valid;
 
     always_ff @(posedge clk_i) begin
-        if (rst_i || trap_req_o || mret_req_o) begin
+        if (rst_i || trap_req_o || mret_req_o || kill_i) begin
             einstr_o <= '0;
         end else if (!stall_i) begin
             einstr_o.valid         <= dinstr_i.valid;

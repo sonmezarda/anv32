@@ -12,3 +12,8 @@ IO_LOC "debug_leds[2]" 14;
 IO_PORT "debug_leds[2]" PULL_MODE=NONE DRIVE=8 IO_TYPE=LVCMOS18;
 IO_LOC "debug_leds[3]" 13;
 IO_PORT "debug_leds[3]" PULL_MODE=NONE DRIVE=8 IO_TYPE=LVCMOS18;
+
+
+
+IO_LOC "gpio_irq_i" 3;
+IO_PORT "gpio_irq_i" PULL_MODE=UP IO_TYPE=LVCMOS18;

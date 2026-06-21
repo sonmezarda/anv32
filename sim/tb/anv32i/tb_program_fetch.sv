@@ -34,6 +34,7 @@ module tb_program_fetch
         .stall_i(stall),
         .pc_jmp_en_i(pc_jmp_en),
         .pc_jmp_addr_i(pc_jmp_addr),
+        .ext_irq_i(1'b0),
         .pc_o(pc_o),
         .instr_o(instr_o),
         .instr_valid_o(instr_valid),

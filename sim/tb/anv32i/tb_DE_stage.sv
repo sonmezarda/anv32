@@ -66,6 +66,7 @@ module anv32i1_DE_stage_tb
         .clk_i          (clk),
         .rst_i          (rst),
         .stall_i        (1'b0),
+        .kill_i         (1'b0),
         .dinstr_i       (dinstr),
         .rs1_rdata_i    (dinstr.rs1_rdata),
         .rs2_rdata_i    (dinstr.rs2_rdata),

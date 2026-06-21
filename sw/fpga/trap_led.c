@@ -6,13 +6,7 @@ void trap_handler(void);
 
 static inline void write_mtvec(unsigned int value)
 {
-    __asm__ volatile (
-        "mv t0, %0\n"
-        ".word 0x30529073\n"
-        :
-        : "r"(value)
-        : "t0", "memory"
-    );
+    __asm__ volatile ("csrw mtvec, %0" :: "r"(value) : "memory");
 }
 
 static inline void trigger_ecall(void)
@@ -70,7 +64,7 @@ __attribute__((naked, used, aligned(4)))
 void trap_handler(void)
 {
     __asm__ volatile (
-        ".word 0x342022f3\n"  /* csrr t0, mcause */
+        "csrr t0, mcause\n"
         "addi t1, zero, 11\n"
         "beq  t0, t1, 1f\n"
         "addi t1, zero, 2\n"
@@ -95,9 +89,9 @@ void trap_handler(void)
         "sw   t3, 0(t2)\n"
 
         "3:\n"
-        ".word 0x341022f3\n"  /* csrr t0, mepc */
+        "csrr t0, mepc\n"
         "addi t0, t0, 4\n"
-        ".word 0x34129073\n"  /* csrw mepc, t0 */
-        ".word 0x30200073\n"  /* mret */
+        "csrw mepc, t0\n"
+        "mret"
     );
 }

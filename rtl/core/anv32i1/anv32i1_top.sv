@@ -5,6 +5,7 @@ module anv32i1_top
     parameter logic [XLEN-1:0] PC_RESET_VALUE = RESET_PC
 )(
     input  logic            clk_i, rst_i, stall_i, pc_jmp_en_i,
+    input  logic            ext_irq_i,
     input  logic [31:0]     pc_jmp_addr_i,
     output logic [31:0]     instr_o, pc_o,
     output logic            instr_valid_o,
@@ -89,6 +90,13 @@ module anv32i1_top
     logic                   mret_req;
     logic [XLEN-1:0]        trap_target;
     logic [XLEN-1:0]        mret_target;
+    logic                   irq_pending;
+    logic                   irq_req;
+    logic [XLEN-1:0]        irq_pc;
+    logic                   csr_trap;
+    logic [XLEN-1:0]        csr_trap_pc;
+    logic [XLEN-1:0]        csr_trap_cause;
+    logic [XLEN-1:0]        csr_trap_tval;
 
     function automatic logic [XLEN-1:0] csr_bypass_value(
         input logic [11:0]     csr_addr_i,
@@ -109,6 +117,27 @@ module anv32i1_top
         mret_target = csr_bypass_value(CSR_MEPC,  mepc);
     end
 
+    always_comb begin : irq_pc_comb
+        if (dinstr.valid) begin
+            irq_pc = dinstr.pc;
+        end else if (dinstr_decode.valid) begin
+            irq_pc = dinstr_decode.pc;
+        end else if (finstr.valid) begin
+            irq_pc = finstr.pc;
+        end else begin
+            irq_pc = fetch_addr;
+        end
+    end
+
+    assign irq_req = irq_pending && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i;
+
+    always_comb begin : csr_trap_mux_comb
+        csr_trap       = trap_req || irq_req;
+        csr_trap_pc    = trap_req ? trap_pc    : irq_pc;
+        csr_trap_cause = trap_req ? trap_cause : MCAUSE_MACHINE_EXTERNAL_IRQ;
+        csr_trap_tval  = trap_req ? trap_tval  : '0;
+    end
+
     // PC JUMP
     always_comb begin : pc_jump_comb
         if (pc_jmp_en_i) begin
@@ -120,6 +149,9 @@ module anv32i1_top
         end else if(mret_req) begin
             pc_jmp_en   = 1'b1;
             pc_jmp_addr = mret_target;
+        end else if(irq_req) begin
+            pc_jmp_en   = 1'b1;
+            pc_jmp_addr = trap_target;
         end else begin
             pc_jmp_en   = e_branch_taken && e_valid && e_pc_changer;
             pc_jmp_addr = e_pc_target;
@@ -235,6 +267,7 @@ module anv32i1_top
         .clk_i(clk_i),
         .rst_i(rst_i),
         .stall_i(stall_e_eff),
+        .kill_i(irq_req),
         .dinstr_i(dinstr),
         .rs1_rdata_i(rs1_E_din),
         .rs2_rdata_i(rs2_E_din),
@@ -303,12 +336,15 @@ module anv32i1_top
         .csr_we_i    (csr_we),
         .csr_waddr_i (csr_waddr),
         .csr_wdata_i (csr_wdata),
+        .ext_irq_i   (ext_irq_i),
         .mtvec_o     (mtvec),
         .mepc_o      (mepc),
 
-        .trap_i      (trap_req),
-        .trap_pc_i   (trap_pc),
-        .trap_cause_i(trap_cause),
-        .trap_tval_i (trap_tval)
+        .trap_i      (csr_trap),
+        .trap_pc_i   (csr_trap_pc),
+        .trap_cause_i(csr_trap_cause),
+        .trap_tval_i (csr_trap_tval),
+        .mret_i      (mret_req),
+        .irq_pending_o(irq_pending)
     );
 endmodule

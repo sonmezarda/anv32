@@ -38,6 +38,7 @@ module tb_fetch_stage;
     ) dut (
         .clk_i(clk), .rst_i(rst), .stall_i(stall),
         .pc_jmp_en_i(pc_jmp_en), .pc_jmp_addr_i(pc_jmp_addr),
+        .ext_irq_i(1'b0),
         .pc_o(pc_o), .instr_o(instr_o), .instr_valid_o(instr_valid),
         .instr_i(instr_rdata), .instr_addr_o(instr_addr),
         .mem_rdata_i(32'b0), .mem_wdata_o(), .mem_addr_o(), .mem_we()
