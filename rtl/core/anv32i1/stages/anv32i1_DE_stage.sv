@@ -10,20 +10,25 @@ module anv32i1_DE_stage
     input  finstr_t            finstr_i,    // from fetch
     input  logic    [XLEN-1:0] rs1_rdata_i, // from regfile
     input  logic    [XLEN-1:0] rs2_rdata_i, // from regfile
+    input  logic    [XLEN-1:0] csr_rdata_i, // from CSR register bank
     output logic    [4:0]      rs1_idx_o,   // to regfile
     output logic    [4:0]      rs2_idx_o,   // to regfile
+    output logic    [11:0]     csr_addr_o,  // to CSR register bank
     output einstr_t            einstr_o,    // to mem + writeback
     output dinstr_t            dinstr_o     // for debug and hazard unit
 );
     dinstr_t dinstr;
     assign dinstr_o = dinstr;
     logic [XLEN-1:0] alu_a, alu_b, alu_result;
+    logic [XLEN-1:0] csr_wdata, csr_rd_wdata;
     logic [XLEN-1:0] pc_plus4, pc_target;
     logic            branch_taken;
+    logic            csr_we;
 
     // regfile okuma adresleri
     assign rs1_idx_o = dinstr.rs1_idx;
     assign rs2_idx_o = dinstr.rs2_idx;
+    assign csr_addr_o = dinstr.csr_addr;
 
     // --- ALU operand seçimi (kontrol decoder'dan) ---
     always_comb begin
@@ -71,6 +76,18 @@ module anv32i1_DE_stage
         .result_o(alu_result)
     );
 
+    anv32_csr_exec csr_exec (
+        .valid_i    (finstr_i.valid && dinstr.valid && dinstr.is_csr),
+        .csr_op_i   (dinstr.csr_op),
+        .csr_imm_i  (dinstr.csr_imm),
+        .rs1_idx_i  (dinstr.rs1_idx),
+        .rs1_rdata_i(rs1_rdata_i),
+        .csr_rdata_i(csr_rdata_i),
+        .csr_we_o   (csr_we),
+        .csr_wdata_o(csr_wdata),
+        .rd_wdata_o (csr_rd_wdata)
+    );
+
     // --- DE/MEM pipeline register ---
     always_ff @(posedge clk_i) begin
         if (rst_i) begin
@@ -79,7 +96,7 @@ module anv32i1_DE_stage
             einstr_o <= '0;
         end else if (!stall_i) begin
             einstr_o.valid         <= finstr_i.valid && dinstr.valid;
-            einstr_o.alu_result    <= alu_result;
+            einstr_o.alu_result    <= dinstr.is_csr ? csr_rd_wdata : alu_result;
             einstr_o.write_data    <= rs2_rdata_i;
             einstr_o.link_pc       <= pc_plus4;
             einstr_o.branch_taken  <= branch_taken;
@@ -91,6 +108,10 @@ module anv32i1_DE_stage
             einstr_o.op            <= dinstr.op;
             einstr_o.is_mem        <= dinstr.is_mem;
             einstr_o.is_pc_changer <= dinstr.is_pc_changer;
+            einstr_o.is_csr        <= dinstr.is_csr;
+            einstr_o.csr_addr      <= dinstr.csr_addr;
+            einstr_o.csr_we        <= csr_we;
+            einstr_o.csr_wdata     <= csr_wdata;
             einstr_o.is_halt       <= dinstr.is_halt;
             einstr_o.pc            <= dinstr.pc;
             einstr_o.id            <= dinstr.id;

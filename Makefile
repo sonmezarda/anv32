@@ -116,6 +116,7 @@ SRC_de := \
 	$(COMMON_PKGS) \
 	rtl/core/common/anv32_alu.sv \
 	rtl/core/common/anv32_decoder.sv \
+	rtl/core/common/anv32_csr_exec.sv \
 	rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
 	sim/tb/anv32i/tb_DE_stage.sv
 HEX_de :=
@@ -134,6 +135,8 @@ SRC_fetch_top := \
 	rtl/core/common/anv32_regfile.sv \
 	rtl/core/common/anv32_alu.sv \
 	rtl/core/common/anv32_decoder.sv \
+	rtl/core/common/anv32_csr.sv \
+	rtl/core/common/anv32_csr_exec.sv \
 	rtl/core/anv32i1/anv32i1_hazard_unit.sv \
 	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
 	rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
@@ -149,6 +152,8 @@ SRC_program_fetch := \
 	rtl/core/common/anv32_regfile.sv \
 	rtl/core/common/anv32_alu.sv \
 	rtl/core/common/anv32_decoder.sv \
+	rtl/core/common/anv32_csr.sv \
+	rtl/core/common/anv32_csr_exec.sv \
 	rtl/core/anv32i1/anv32i1_hazard_unit.sv \
 	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
 	rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
@@ -163,6 +168,8 @@ ANV32I1_TOP_SRC := \
 	rtl/core/common/anv32_regfile.sv \
 	rtl/core/common/anv32_alu.sv \
 	rtl/core/common/anv32_decoder.sv \
+	rtl/core/common/anv32_csr.sv \
+	rtl/core/common/anv32_csr_exec.sv \
 	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
 	rtl/core/anv32i1/stages/anv32i1_DE_stage.sv \
 	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \

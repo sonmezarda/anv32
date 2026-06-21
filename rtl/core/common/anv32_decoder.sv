@@ -191,7 +191,7 @@ module anv32_decoder
                 end
             end
 
-            // ---- SYSTEM (ECALL/EBREAK; CSR added in M3) ---------------------
+            // ---- SYSTEM (ECALL/EBREAK/CSR) ----------------------------------
             OPC_SYSTEM: begin
                 if (funct3 == F3_SYSTEM) begin
                     unique case (instr_i[31:20])
@@ -202,8 +202,52 @@ module anv32_decoder
                         end
                         default: ; // MRET/WFI/etc -> illegal for now
                     endcase
+                end else begin
+                    unique case (funct3)
+                        F3_CSRRW: begin
+                            dinstr_o.valid  = 1'b1;
+                            dinstr_o.op     = CSRRW;
+                            dinstr_o.csr_op = CSR_OP_RW;
+                        end
+                        F3_CSRRS: begin
+                            dinstr_o.valid  = 1'b1;
+                            dinstr_o.op     = CSRRS;
+                            dinstr_o.csr_op = CSR_OP_RS;
+                        end
+                        F3_CSRRC: begin
+                            dinstr_o.valid  = 1'b1;
+                            dinstr_o.op     = CSRRC;
+                            dinstr_o.csr_op = CSR_OP_RC;
+                        end
+                        F3_CSRRWI: begin
+                            dinstr_o.valid   = 1'b1;
+                            dinstr_o.op      = CSRRWI;
+                            dinstr_o.csr_op  = CSR_OP_RW;
+                            dinstr_o.csr_imm = 1'b1;
+                        end
+                        F3_CSRRSI: begin
+                            dinstr_o.valid   = 1'b1;
+                            dinstr_o.op      = CSRRSI;
+                            dinstr_o.csr_op  = CSR_OP_RS;
+                            dinstr_o.csr_imm = 1'b1;
+                        end
+                        F3_CSRRCI: begin
+                            dinstr_o.valid   = 1'b1;
+                            dinstr_o.op      = CSRRCI;
+                            dinstr_o.csr_op  = CSR_OP_RC;
+                            dinstr_o.csr_imm = 1'b1;
+                        end
+                        default: ;
+                    endcase
+
+                    if (dinstr_o.valid) begin
+                        dinstr_o.rd_valid  = 1'b1;
+                        dinstr_o.is_csr    = 1'b1;
+                        dinstr_o.csr_addr  = instr_i[31:20];
+                        dinstr_o.rs1_valid = !dinstr_o.csr_imm &&
+                            (dinstr_o.csr_op == CSR_OP_RW || rs1 != 5'd0);
+                    end
                 end
-                // funct3 != 0 -> CSR ops, illegal until M3
             end
 
             default: ; // unknown opcode -> illegal (valid 0)

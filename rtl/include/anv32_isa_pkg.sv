@@ -46,6 +46,12 @@ package anv32_isa_pkg;
     localparam logic [2:0] F3_OR      = 3'b110;  // OP_IMM ORI
     localparam logic [2:0] F3_AND     = 3'b111;  // OP_IMM ANDI
     localparam logic [2:0] F3_SYSTEM  = 3'b000;  // ECALL/EBREAK
+    localparam logic [2:0] F3_CSRRW   = 3'b001;
+    localparam logic [2:0] F3_CSRRS   = 3'b010;
+    localparam logic [2:0] F3_CSRRC   = 3'b011;
+    localparam logic [2:0] F3_CSRRWI  = 3'b101;
+    localparam logic [2:0] F3_CSRRSI  = 3'b110;
+    localparam logic [2:0] F3_CSRRCI  = 3'b111;
 
     // funct7 (instr[31:25]) -
     localparam logic [6:0] F7_DEFAULT = 7'b0000000;
@@ -66,6 +72,15 @@ package anv32_isa_pkg;
     localparam logic [11:0] SYS_ECALL  = 12'h000;
     localparam logic [11:0] SYS_EBREAK = 12'h001;
 
+    // Machine CSR addresses
+    localparam logic [11:0] CSR_MSTATUS = 12'h300;
+    localparam logic [11:0] CSR_MIE     = 12'h304;
+    localparam logic [11:0] CSR_MTVEC   = 12'h305;
+    localparam logic [11:0] CSR_MEPC    = 12'h341;
+    localparam logic [11:0] CSR_MCAUSE  = 12'h342;
+    localparam logic [11:0] CSR_MTVAL   = 12'h343;
+    localparam logic [11:0] CSR_MIP     = 12'h344;
+
     // internal micro-op
     typedef enum logic [5:0] {
         // U-type
@@ -85,6 +100,7 @@ package anv32_isa_pkg;
         // M extension (RV32M)
         MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU,
         // system
+        CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI,
         ECALL, EBREAK,
         // catch-all
         UNKNOWN
@@ -110,6 +126,9 @@ package anv32_isa_pkg;
     // --- rd'ye ne yazılacak ---
     typedef enum logic [1:0] { WB_ALU, WB_MEM, WB_PC4 } wb_sel_e;
 
+    typedef enum logic [2:0] {
+        CSR_OP_RW, CSR_OP_RS, CSR_OP_RC
+    } csr_op_e;
     // Fetched Instruction
     typedef struct packed {
         logic [XLEN-1:0] pc;
@@ -144,6 +163,10 @@ package anv32_isa_pkg;
         logic            is_mem;        // load/store
         logic            is_pc_changer; // jump/branch
         logic            is_muldiv;     // RV32M op (needs multi-cycle unit)
+        logic            is_csr;        // Zicsr instruction
+        logic            csr_imm;       // use instr[19:15] as zimm instead of rs1
+        csr_op_e         csr_op;        // RW/RS/RC semantic
+        logic [11:0]     csr_addr;      // instr[31:20]
         logic            is_halt;       // EBREAK -> sim-stop
     } dinstr_t;
 
@@ -169,6 +192,10 @@ package anv32_isa_pkg;
         wb_sel_e         wb_sel;
         logic            is_mem;
         logic            is_pc_changer;
+        logic            is_csr;
+        logic [11:0]     csr_addr;
+        logic            csr_we;
+        logic [XLEN-1:0] csr_wdata;
         logic            is_halt;
     } einstr_t;
 
@@ -183,6 +210,10 @@ package anv32_isa_pkg;
         logic [4:0]      rd_idx;
         logic            rd_valid;
         wb_sel_e         wb_sel;        // rd <- alu / mem / pc+4
+        logic            is_csr;
+        logic [11:0]     csr_addr;
+        logic            csr_we;
+        logic [XLEN-1:0] csr_wdata;
     } minstr_t;
 
 

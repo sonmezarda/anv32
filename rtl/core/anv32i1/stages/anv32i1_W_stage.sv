@@ -10,13 +10,20 @@ module anv32i1_W_stage
 
     output logic            rd_wen_o,
     output logic [XLEN-1:0] rd_wdata_o,
-    output logic [4:0]      rd_idx_o
+    output logic [4:0]      rd_idx_o,
+
+    output logic            csr_we_o,
+    output logic [11:0]     csr_addr_o,
+    output logic [XLEN-1:0] csr_wdata_o
 );
     logic [XLEN-1:0] result;
     assign rd_wen_o = ~rst_i && ~stall_i && minstr_i.valid && minstr_i.rd_valid;
+    assign csr_we_o = ~rst_i && ~stall_i && minstr_i.valid && minstr_i.is_csr && minstr_i.csr_we;
 
     assign rd_idx_o = minstr_i.rd_idx;
     assign rd_wdata_o = result;
+    assign csr_addr_o = minstr_i.csr_addr;
+    assign csr_wdata_o = minstr_i.csr_wdata;
 
     always_comb begin : result_select_comb
         case(minstr_i.wb_sel)

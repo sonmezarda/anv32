@@ -13,6 +13,8 @@
         <File path="../../../rtl/core/anv32i1/stages/anv32i1_W_stage.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/common/anv32_alu.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_csr.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_csr_exec.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/common/anv32_decoder.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/common/anv32_regfile.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_config_pkg.sv" type="file.verilog" enable="1"/>

@@ -2,6 +2,8 @@ verilator --lint-only --timing \
     rtl/include/anv32_config_pkg.sv \
     rtl/include/anv32_isa_pkg.sv \
     rtl/core/common/anv32_decoder.sv \
+    rtl/core/common/anv32_csr.sv \
+    rtl/core/common/anv32_csr_exec.sv \
     rtl/common/mem/anv32_bram_tdp.sv \
     rtl/core/common/anv32_alu.sv \
     rtl/core/common/anv32_regfile.sv\

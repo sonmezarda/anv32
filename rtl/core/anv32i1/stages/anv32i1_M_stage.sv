@@ -80,6 +80,10 @@ module anv32i1_M_stage
             minstr.rd_valid    <= einstr_i.rd_valid;
             minstr.wb_sel      <= einstr_i.wb_sel;
             minstr.op          <= einstr_i.op;
+            minstr.is_csr      <= einstr_i.is_csr;
+            minstr.csr_addr    <= einstr_i.csr_addr;
+            minstr.csr_we      <= einstr_i.csr_we;
+            minstr.csr_wdata   <= einstr_i.csr_wdata;
         end
     end
 

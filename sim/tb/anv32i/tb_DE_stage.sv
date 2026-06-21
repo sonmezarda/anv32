@@ -29,8 +29,11 @@ module anv32i1_DE_stage_tb
     // ---------------- DUT I/O ----------------------------------------------
     finstr_t           finstr;
     einstr_t           einstr;
+    dinstr_t           dinstr;
     logic [4:0]        rs1_idx, rs2_idx;
+    logic [11:0]       csr_addr;
     logic [XLEN-1:0]   rs1_rdata, rs2_rdata;
+    logic [XLEN-1:0]   csr_rdata = 32'hCAFE_BABE;
 
     // ---------------- behavioural register file (async read) ---------------
     logic [XLEN-1:0] xreg [0:31];
@@ -42,12 +45,16 @@ module anv32i1_DE_stage_tb
         .clk_i      (clk),
         .rst_i      (rst),
         .stall_i    (stall),
+        .flush_i    (1'b0),
         .finstr_i   (finstr),
         .rs1_rdata_i(rs1_rdata),
         .rs2_rdata_i(rs2_rdata),
+        .csr_rdata_i(csr_rdata),
         .rs1_idx_o  (rs1_idx),
         .rs2_idx_o  (rs2_idx),
-        .einstr_o   (einstr)
+        .csr_addr_o (csr_addr),
+        .einstr_o   (einstr),
+        .dinstr_o   (dinstr)
     );
 
     // =======================================================================
@@ -144,6 +151,7 @@ module anv32i1_DE_stage_tb
         xreg[4] = 32'd1;
         xreg[5] = 32'hFFFFFFF0;      // -16
         xreg[6] = 32'h00001001;      // for JALR LSB-clear test
+        xreg[7] = 32'h00000F0F;      // for CSR write tests
 
         finstr = '0;
 
@@ -280,6 +288,27 @@ module anv32i1_DE_stage_tb
         chk ("pc_target",  einstr.pc_target, 32'h1002);   // LSB cleared
         chk ("link_pc",    einstr.link_pc,   32'h304);
         chk_wb("wb_sel",   einstr.wb_sel,    WB_PC4);
+
+        // --------------------------------------------------------------
+        //  CSR: rd gets old CSR value, CSR write data is op-dependent
+        // --------------------------------------------------------------
+        run("CSRRW", enc_i(CSR_MSTATUS, 5'd7, F3_CSRRW, 5'd10, OPC_SYSTEM), 32'h400);
+        chk ("alu_result", einstr.alu_result, 32'hCAFE_BABE);
+        chk ("csr_addr",   einstr.csr_addr,   CSR_MSTATUS);
+        chk ("csr_wdata",  einstr.csr_wdata,  32'h00000F0F);
+        chk1("is_csr",     einstr.is_csr,     1'b1);
+        chk1("csr_we",     einstr.csr_we,     1'b1);
+        chk1("rd_valid",   einstr.rd_valid,   1'b1);
+
+        run("CSRRS0", enc_i(CSR_MTVEC, 5'd0, F3_CSRRS, 5'd10, OPC_SYSTEM), 32'h404);
+        chk ("alu_result", einstr.alu_result, 32'hCAFE_BABE);
+        chk ("csr_addr",   einstr.csr_addr,   CSR_MTVEC);
+        chk1("csr_we",     einstr.csr_we,     1'b0);
+
+        run("CSRRCI", enc_i(CSR_MCAUSE, 5'd5, F3_CSRRCI, 5'd10, OPC_SYSTEM), 32'h408);
+        chk ("alu_result", einstr.alu_result, 32'hCAFE_BABE);
+        chk ("csr_wdata",  einstr.csr_wdata,  32'hCAFE_BABA);
+        chk1("csr_we",     einstr.csr_we,     1'b1);
 
         // --------------------------------------------------------------
         //  Illegal instruction -> valid = 0

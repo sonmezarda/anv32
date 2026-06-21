@@ -63,6 +63,14 @@ module anv32i1_top
     logic [XLEN-1:0]        w_fwd_data;
     logic [XLEN-1:0]        rs1_DE_din;
     logic [XLEN-1:0]        rs2_DE_din;
+    logic [11:0]            csr_addr;
+    logic [XLEN-1:0]        csr_rdata;
+    logic [XLEN-1:0]        csr_rdata_DE;
+    logic                   csr_we;
+    logic [11:0]            csr_waddr;
+    logic [XLEN-1:0]        csr_wdata;
+    logic [XLEN-1:0]        mtvec;
+    logic [XLEN-1:0]        mepc;
 
     always_comb begin : pc_jump_comb
         if (pc_jmp_en_i) begin
@@ -128,6 +136,18 @@ module anv32i1_top
         endcase
     end
 
+    always_comb begin : csr_fwd_comb
+        if (einstr.valid && einstr.is_csr && einstr.csr_we &&
+            einstr.csr_addr == csr_addr) begin
+            csr_rdata_DE = einstr.csr_wdata;
+        end else if (minstr.valid && minstr.is_csr && minstr.csr_we &&
+            minstr.csr_addr == csr_addr) begin
+            csr_rdata_DE = minstr.csr_wdata;
+        end else begin
+            csr_rdata_DE = csr_rdata;
+        end
+    end
+
     anv32i1_DE_stage DE(
         .clk_i(clk_i),
         .rst_i(rst_i),
@@ -136,8 +156,10 @@ module anv32i1_top
         .finstr_i(finstr),
         .rs1_rdata_i(rs1_DE_din),
         .rs2_rdata_i(rs2_DE_din),
+        .csr_rdata_i(csr_rdata_DE),
         .rs1_idx_o(rs1_idx),
         .rs2_idx_o(rs2_idx),
+        .csr_addr_o(csr_addr),
         .einstr_o(einstr),
         .dinstr_o(dinstr)
     );
@@ -164,7 +186,10 @@ module anv32i1_top
 
         .rd_wen_o(regfile_we),
         .rd_wdata_o(rd_wdata),
-        .rd_idx_o(rd_idx)
+        .rd_idx_o(rd_idx),
+        .csr_we_o(csr_we),
+        .csr_addr_o(csr_waddr),
+        .csr_wdata_o(csr_wdata)
     );
 
     assign stall_m = stall_m_eff;
@@ -179,5 +204,17 @@ module anv32i1_top
         .rd_wdata_i(rd_wdata),
         .rs1_rdata_o(rs1_rdata),
         .rs2_rdata_o(rs2_rdata)
+    );
+
+    anv32_csr csr (
+        .clk_i       (clk_i),
+        .rst_i       (rst_i),
+        .csr_raddr_i (csr_addr),
+        .csr_rdata_o (csr_rdata),
+        .csr_we_i    (csr_we),
+        .csr_waddr_i (csr_waddr),
+        .csr_wdata_i (csr_wdata),
+        .mtvec_o     (mtvec),
+        .mepc_o      (mepc)
     );
 endmodule
