@@ -12,6 +12,11 @@ module anv32_csr
     input  logic [11:0] csr_waddr_i,
     input  logic [XLEN-1:0] csr_wdata_i,
 
+    input  logic            trap_i,
+    input  logic [XLEN-1:0] trap_pc_i,
+    input  logic [XLEN-1:0] trap_cause_i,
+    input  logic [XLEN-1:0] trap_tval_i,
+
     output logic [XLEN-1:0] mtvec_o,
     output logic [XLEN-1:0] mepc_o
 );
@@ -54,6 +59,12 @@ module anv32_csr
                     CSR_MIP:     mip_q     <= csr_wdata_i;
                     default: ;
                 endcase
+            end
+
+            if (trap_i) begin
+                mepc_q   <= trap_pc_i;
+                mcause_q <= trap_cause_i;
+                mtval_q  <= trap_tval_i;
             end
         end
     end

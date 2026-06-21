@@ -113,8 +113,15 @@ module tb_cpu_trace
             DIVU:    return "DIVU";
             REM:     return "REM";
             REMU:    return "REMU";
+            CSRRW:   return "CSRRW";
+            CSRRS:   return "CSRRS";
+            CSRRC:   return "CSRRC";
+            CSRRWI:  return "CSRRWI";
+            CSRRSI:  return "CSRRSI";
+            CSRRCI:  return "CSRRCI";
             ECALL:   return "ECALL";
             EBREAK:  return "EBREAK";
+            MRET:    return "MRET";
             default: return "UNKNOWN";
         endcase
     endfunction
@@ -265,7 +272,7 @@ module tb_cpu_trace
         if (dut.pc_jmp_en) begin
             ctrl_s = {ctrl_s, $sformatf(" redirect->%s", hex32(dut.pc_jmp_addr))};
         end
-        if (dut.flush_DE) begin
+        if (dut.flush_D) begin
             ctrl_s = {ctrl_s, " flush_de"};
         end
         if (dut.stall_f || dut.stall_de || dut.stall_m || dut.stall_w) begin
@@ -287,7 +294,7 @@ module tb_cpu_trace
                               rst,
                               yn(dut.pc_jmp_en),
                               hex32(dut.pc_jmp_addr),
-                              yn(dut.flush_DE),
+                              yn(dut.flush_D),
                               dut.stall_f,
                               dut.stall_de,
                               dut.stall_m,

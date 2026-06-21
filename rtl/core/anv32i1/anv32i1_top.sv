@@ -53,7 +53,7 @@ module anv32i1_top
     logic [XLEN-1:0]        m_stage_mem_out;
     logic [XLEN-1:0]        m_stage_dmem_addr_out;
 
-    logic                   flush_DE;
+    logic                   flush_D;
     fwd_sel_e               rs1_fwd_sel;
     fwd_sel_e               rs2_fwd_sel;
     logic                   stall_f_eff;
@@ -81,10 +81,45 @@ module anv32i1_top
     logic                   e_pc_changer;
     logic                   e_valid;
 
+    // E stage trap out
+    logic                   trap_req;
+    logic [XLEN-1:0]        trap_pc;
+    logic [XLEN-1:0]        trap_cause;
+    logic [XLEN-1:0]        trap_tval;
+    logic                   mret_req;
+    logic [XLEN-1:0]        trap_target;
+    logic [XLEN-1:0]        mret_target;
+
+    function automatic logic [XLEN-1:0] csr_bypass_value(
+        input logic [11:0]     csr_addr_i,
+        input logic [XLEN-1:0] csr_value_i
+    );
+        if (einstr.valid && einstr.is_csr && einstr.csr_we &&
+            einstr.csr_addr == csr_addr_i) begin
+            return einstr.csr_wdata;
+        end else if (csr_we && csr_waddr == csr_addr_i) begin
+            return csr_wdata;
+        end else begin
+            return csr_value_i;
+        end
+    endfunction
+
+    always_comb begin : csr_redirect_bypass_comb
+        trap_target = csr_bypass_value(CSR_MTVEC, mtvec);
+        mret_target = csr_bypass_value(CSR_MEPC,  mepc);
+    end
+
+    // PC JUMP
     always_comb begin : pc_jump_comb
         if (pc_jmp_en_i) begin
             pc_jmp_en   = 1'b1;
             pc_jmp_addr = pc_jmp_addr_i;
+        end else if(trap_req) begin
+            pc_jmp_en   = 1'b1;
+            pc_jmp_addr = trap_target;
+        end else if(mret_req) begin
+            pc_jmp_en   = 1'b1;
+            pc_jmp_addr = mret_target;
         end else begin
             pc_jmp_en   = e_branch_taken && e_valid && e_pc_changer;
             pc_jmp_addr = e_pc_target;
@@ -111,7 +146,7 @@ module anv32i1_top
         .stall_F_o(stall_f),
         .rs1_fwd_sel(rs1_fwd_sel),
         .rs2_fwd_sel(rs2_fwd_sel),
-        .flush_DE_o(flush_DE)
+        .flush_D_o(flush_D)
     );
     anv32i1_fetch_stage #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
         .clk_i(clk_i), 
@@ -165,11 +200,7 @@ module anv32i1_top
     end
 
     always_comb begin : csr_d_bypass_comb
-        if (csr_we && csr_waddr == csr_addr) begin
-            csr_rdata_D = csr_wdata;
-        end else begin
-            csr_rdata_D = csr_rdata;
-        end
+        csr_rdata_D = csr_bypass_value(csr_addr, csr_rdata);
     end
 
     always_comb begin : csr_e_fwd_comb
@@ -187,7 +218,7 @@ module anv32i1_top
     anv32i1_D_stage D(
         .clk_i(clk_i),
         .rst_i(rst_i),
-        .flush_i(flush_DE),
+        .flush_i(flush_D),
         .stall_i(stall_de_eff),
         .finstr_i(finstr),
         .rs1_rdata_i(rs1_D_din),
@@ -212,7 +243,14 @@ module anv32i1_top
         .pc_target_o(e_pc_target),
         .pc_changer_o(e_pc_changer),
         .valid_o(e_valid),
-        .einstr_o(einstr)
+        .einstr_o(einstr),
+
+        .trap_req_o(trap_req),
+        .trap_pc_o(trap_pc),
+        .trap_cause_o(trap_cause),
+        .trap_tval_o(trap_tval),
+        .mret_req_o(mret_req)
+
     );
 
     anv32i1_M_stage M(
@@ -266,6 +304,11 @@ module anv32i1_top
         .csr_waddr_i (csr_waddr),
         .csr_wdata_i (csr_wdata),
         .mtvec_o     (mtvec),
-        .mepc_o      (mepc)
+        .mepc_o      (mepc),
+
+        .trap_i      (trap_req),
+        .trap_pc_i   (trap_pc),
+        .trap_cause_i(trap_cause),
+        .trap_tval_i (trap_tval)
     );
 endmodule

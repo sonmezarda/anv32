@@ -195,10 +195,20 @@ module anv32_decoder
             OPC_SYSTEM: begin
                 if (funct3 == F3_SYSTEM) begin
                     unique case (instr_i[31:20])
-                        SYS_ECALL:  begin dinstr_o.valid = 1'b1; dinstr_o.op = ECALL; end
+                        SYS_ECALL:  begin 
+                            dinstr_o.valid = 1'b1; 
+                            dinstr_o.op = ECALL; 
+                            dinstr_o.exc_valid = 1'b1;
+                            dinstr_o.exc_cause = mcause_exception(MCAUSE_ECALL_M);
+                            dinstr_o.exc_tval  = '0;
+                        end
                         SYS_EBREAK: begin
                             dinstr_o.valid   = 1'b1; dinstr_o.op = EBREAK;
                             dinstr_o.is_halt = 1'b1; // sim-stop; becomes a real trap in M4
+                        end
+                        SYS_MRET: begin
+                            dinstr_o.valid = 1'b1;
+                            dinstr_o.op    = MRET;
                         end
                         default: ; // MRET/WFI/etc -> illegal for now
                     endcase
@@ -293,6 +303,13 @@ module anv32_decoder
             (dinstr_o.op inside {JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU});
         dinstr_o.is_muldiv = dinstr_o.valid &&
             (dinstr_o.op inside {MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU});
-    end
 
+        // Illegal instruction turns into a real pipeline instruction that traps.
+        if(dinstr_o.op == UNKNOWN) begin 
+            dinstr_o.valid     = 1'b1;
+            dinstr_o.exc_valid = 1'b1;
+            dinstr_o.exc_cause = mcause_exception(MCAUSE_ILLEGAL_INSTR);
+            dinstr_o.exc_tval  = instr_i;
+        end
+    end
 endmodule

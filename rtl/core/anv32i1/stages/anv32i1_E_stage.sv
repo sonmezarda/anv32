@@ -15,13 +15,26 @@ module anv32i1_E_stage
     output logic    [XLEN-1:0] pc_target_o,
     output logic               pc_changer_o,
     output logic               valid_o,
-    output einstr_t            einstr_o
+    output einstr_t            einstr_o,
+
+    output logic               trap_req_o,
+    output logic    [XLEN-1:0] trap_pc_o,
+    output logic    [XLEN-1:0] trap_cause_o,
+    output logic    [XLEN-1:0] trap_tval_o,
+    output logic               mret_req_o
+
 );
     logic [XLEN-1:0] alu_a, alu_b, alu_result;
     logic [XLEN-1:0] csr_wdata, csr_rd_wdata;
     logic [XLEN-1:0] pc_plus4, pc_target;
     logic            branch_taken;
     logic            csr_we;
+
+    assign trap_req_o   = dinstr_i.valid && dinstr_i.exc_valid;
+    assign trap_pc_o    = dinstr_i.pc;
+    assign trap_cause_o = dinstr_i.exc_cause;
+    assign trap_tval_o  = dinstr_i.exc_tval;
+    assign mret_req_o   = dinstr_i.valid && dinstr_i.op == MRET;
 
     always_comb begin
         unique case (dinstr_i.a_sel)
@@ -77,7 +90,7 @@ module anv32i1_E_stage
     assign valid_o        = dinstr_i.valid;
 
     always_ff @(posedge clk_i) begin
-        if (rst_i) begin
+        if (rst_i || trap_req_o || mret_req_o) begin
             einstr_o <= '0;
         end else if (!stall_i) begin
             einstr_o.valid         <= dinstr_i.valid;

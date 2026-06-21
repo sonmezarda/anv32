@@ -11,8 +11,7 @@ module anv32i1_hazard_unit
     input  dinstr_t dinstr_e_i, // instr currently in execute
     input  einstr_t einstr_i,   // instr after execute
     input  minstr_t minstr_i,   // instr after mem stage
-    
-    output logic flush_DE_o,
+    output logic flush_D_o,
     output logic stall_DE_o,
     output logic stall_F_o,
     output fwd_sel_e rs1_fwd_sel,
@@ -20,7 +19,7 @@ module anv32i1_hazard_unit
     // output logic flush_F_o,
     // output logic flush_M_o
 );
-    assign flush_DE_o = branch_taken_i;
+    assign flush_D_o = branch_taken_i;
     logic drs1_need_e, drs2_need_e;
     logic ers1_need_m, ers2_need_m;
     logic ers1_need_wb, ers2_need_wb;

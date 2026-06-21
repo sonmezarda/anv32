@@ -72,6 +72,7 @@ package anv32_isa_pkg;
     localparam logic [11:0] SYS_ECALL  = 12'h000;
     localparam logic [11:0] SYS_EBREAK = 12'h001;
 
+    localparam logic [11:0] SYS_MRET   = 12'h302;
     // Machine CSR addresses
     localparam logic [11:0] CSR_MSTATUS = 12'h300;
     localparam logic [11:0] CSR_MIE     = 12'h304;
@@ -80,6 +81,7 @@ package anv32_isa_pkg;
     localparam logic [11:0] CSR_MCAUSE  = 12'h342;
     localparam logic [11:0] CSR_MTVAL   = 12'h343;
     localparam logic [11:0] CSR_MIP     = 12'h344;
+    
 
     // internal micro-op
     typedef enum logic [5:0] {
@@ -100,7 +102,7 @@ package anv32_isa_pkg;
         // M extension (RV32M)
         MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU,
         // system
-        CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI,
+        CSRRW, CSRRS, CSRRC, CSRRWI, CSRRSI, CSRRCI, MRET,
         ECALL, EBREAK,
         // catch-all
         UNKNOWN
@@ -129,6 +131,19 @@ package anv32_isa_pkg;
     typedef enum logic [2:0] {
         CSR_OP_RW, CSR_OP_RS, CSR_OP_RC
     } csr_op_e;
+
+    typedef enum logic [XLEN-2:0] { // msb is for exception/interrupt
+        MCAUSE_INSTR_ADDR_MISALIGNED = 31'd0,
+        MCAUSE_INSTR_ACCESS_FAULT    = 31'd1,
+        MCAUSE_ILLEGAL_INSTR         = 31'd2,
+        MCAUSE_BREAKPOINT            = 31'd3,
+        MCAUSE_LOAD_ADDR_MISALIGNED  = 31'd4,
+        MCAUSE_LOAD_ACCESS_FAULT     = 31'd5,
+        MCAUSE_STORE_ADDR_MISALIGNED = 31'd6,
+        MCAUSE_STORE_ACCESS_FAULT    = 31'd7,
+        MCAUSE_ECALL_U               = 31'd8,
+        MCAUSE_ECALL_M               = 31'd11
+    } mcause_code_e;
     // Fetched Instruction
     typedef struct packed {
         logic [XLEN-1:0] pc;
@@ -171,6 +186,10 @@ package anv32_isa_pkg;
         logic [11:0]     csr_addr;      // instr[31:20]
         logic [XLEN-1:0] csr_rdata;     // D/E latched CSR read data
         logic            is_halt;       // EBREAK -> sim-stop
+
+        logic        exc_valid;         // is this instruction an exception?
+        logic [XLEN-1:0] exc_cause;         // exception cause code     
+        logic [XLEN-1:0] exc_tval;          
     } dinstr_t;
 
     // Executed Instruction
@@ -246,6 +265,14 @@ package anv32_isa_pkg;
 
     function automatic logic [XLEN-1:0] imm_shamt(input logic [31:0] w);
         return {27'b0, w[24:20]};   // shift amount: 5 bit, zero-extend
+    endfunction
+
+    function automatic logic [XLEN-1:0] mcause_exception(input mcause_code_e code);
+        return {1'b0, code};
+    endfunction
+
+    function automatic logic [XLEN-1:0] mcause_interrupt(input mcause_code_e code);
+        return {1'b1, code};
     endfunction
 
 endpackage

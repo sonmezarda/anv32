@@ -22,8 +22,9 @@ module anv32i1_D_stage
     dinstr_t decoded_gated;
 
     always_comb begin
-        decoded_gated       = decoded;
-        decoded_gated.valid = finstr_i.valid && decoded.valid;
+        decoded_gated           = decoded;
+        decoded_gated.valid     = finstr_i.valid && decoded.valid;
+        decoded_gated.exc_valid = finstr_i.valid && decoded.exc_valid;
     end
 
     assign dinstr_decode_o = decoded_gated;
