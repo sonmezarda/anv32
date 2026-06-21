@@ -30,6 +30,9 @@ module anv32i1_soc_top(
     logic                   gpio_irq_pending_sel;
     logic                   gpio_irq_pending_clear;
     logic                   mmio_sel;
+    logic                   mmio_sel_q;
+    logic [31:0]            mmio_rdata;
+    logic [31:0]            mmio_rdata_q;
 
     logic gpio_irq_reg, gpio_irq_reg2, gpio_irq_reg2_q, gpio_irq_rise;
 
@@ -43,9 +46,10 @@ module anv32i1_soc_top(
     assign led_write = led_sel && (mem_we != 4'b0);
     assign gpio_irq_pending_clear = gpio_irq_pending_sel && (mem_we != 4'b0) && mem_wdata[0];
     assign dmem_we = mmio_sel ? 4'b0 : mem_we;
-    assign mem_rdata = led_sel ? led_reg :
-                       gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
-                       dmem_rdata;
+    assign mmio_rdata = led_sel ? led_reg :
+                        gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
+                        32'b0;
+    assign mem_rdata = mmio_sel_q ? mmio_rdata_q : dmem_rdata;
     assign gpio_irq_rise = gpio_irq_reg2 && !gpio_irq_reg2_q;
 
     always_ff @(posedge clk_i) begin
@@ -55,11 +59,16 @@ module anv32i1_soc_top(
             gpio_irq_reg2   <= 1'b0;
             gpio_irq_reg2_q <= 1'b0;
             gpio_irq_pending <= 1'b0;
+            mmio_sel_q      <= 1'b0;
+            mmio_rdata_q    <= 32'b0;
         end else if (led_write) begin
             led_reg <= mem_wdata;
         end
 
         if (!rst_i) begin
+            mmio_sel_q   <= mmio_sel;
+            mmio_rdata_q <= mmio_rdata;
+
             gpio_irq_reg    <= gpio_irq_i;
             gpio_irq_reg2   <= gpio_irq_reg;
             gpio_irq_reg2_q <= gpio_irq_reg2;
