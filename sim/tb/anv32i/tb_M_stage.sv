@@ -1,5 +1,5 @@
 // ============================================================================
-// anv32i1_M_stage_tb.sv
+// anv32_memory_c1_tb.sv
 // Self-checking testbench for the memory stage.
 //
 // Covers:
@@ -11,7 +11,7 @@
 // ============================================================================
 `timescale 1ns/1ps
 
-module anv32i1_M_stage_tb
+module anv32_memory_c1_tb
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 ;
@@ -33,7 +33,7 @@ module anv32i1_M_stage_tb
 
     always #5 clk = ~clk;
 
-    anv32i1_M_stage dut (
+    anv32_memory_c1 dut (
         .clk_i       (clk),
         .rst_i       (rst),
         .stall_i     (stall),

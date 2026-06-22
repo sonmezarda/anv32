@@ -7,10 +7,11 @@ verilator --lint-only --timing \
     rtl/common/mem/anv32_bram_tdp.sv \
     rtl/core/common/anv32_alu.sv \
     rtl/core/common/anv32_regfile.sv\
-    rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
-    rtl/core/anv32i1/stages/anv32i1_D_stage.sv \
-    rtl/core/anv32i1/stages/anv32i1_E_stage.sv \
-    rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
-    rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
+    rtl/core/pipe5/anv32_fetch_c1.sv \
+    rtl/core/pipe5/anv32_decode_c1.sv \
+    rtl/core/anv32i1/anv32_execute_i_c1.sv \
+    rtl/core/pipe5/anv32_memory_c1.sv \
+    rtl/core/pipe5/anv32_writeback_c1.sv \
+    rtl/core/pipe5/anv32_hazard_basic.sv \
     rtl/core/anv32i1/anv32i1_top.sv \
     --top-module anv32i1_top -Wno-TIMESCALEMOD -Wno-WIDTHEXPAND

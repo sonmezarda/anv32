@@ -113,21 +113,21 @@ $(FETCH_TEST_LANE_HEX) &: $(FETCH_TEST_HEX_SRC) $(HEX_SPLIT)
 # ---------------------------------------------------------------------------
 TESTS := de m fetch_top
 
-TOP_de := anv32i1_DE_stage_tb
+TOP_de := anv32_decode_execute_c1_tb
 SRC_de := \
 	$(COMMON_PKGS) \
 	rtl/core/common/anv32_alu.sv \
 	rtl/core/common/anv32_decoder.sv \
 	rtl/core/common/anv32_csr_exec.sv \
-	rtl/core/anv32i1/stages/anv32i1_D_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_E_stage.sv \
+	rtl/core/pipe5/anv32_decode_c1.sv \
+	rtl/core/anv32i1/anv32_execute_i_c1.sv \
 	sim/tb/anv32i/tb_DE_stage.sv
 HEX_de :=
 
-TOP_m := anv32i1_M_stage_tb
+TOP_m := anv32_memory_c1_tb
 SRC_m := \
 	$(COMMON_PKGS) \
-	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
+	rtl/core/pipe5/anv32_memory_c1.sv \
 	sim/tb/anv32i/tb_M_stage.sv
 HEX_m :=
 
@@ -140,12 +140,12 @@ SRC_fetch_top := \
 	rtl/core/common/anv32_decoder.sv \
 	rtl/core/common/anv32_csr.sv \
 	rtl/core/common/anv32_csr_exec.sv \
-	rtl/core/anv32i1/anv32i1_hazard_unit.sv \
-	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_D_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_E_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
+	rtl/core/pipe5/anv32_hazard_basic.sv \
+	rtl/core/pipe5/anv32_fetch_c1.sv \
+	rtl/core/pipe5/anv32_decode_c1.sv \
+	rtl/core/anv32i1/anv32_execute_i_c1.sv \
+	rtl/core/pipe5/anv32_memory_c1.sv \
+	rtl/core/pipe5/anv32_writeback_c1.sv \
 	rtl/core/anv32i1/anv32i1_top.sv \
 	sim/tb/anv32i/tb_top_fetchtest.sv
 HEX_fetch_top := $(FETCH_TEST_LANE_HEX)
@@ -158,12 +158,12 @@ SRC_program_fetch := \
 	rtl/core/common/anv32_decoder.sv \
 	rtl/core/common/anv32_csr.sv \
 	rtl/core/common/anv32_csr_exec.sv \
-	rtl/core/anv32i1/anv32i1_hazard_unit.sv \
-	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_D_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_E_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
+	rtl/core/pipe5/anv32_hazard_basic.sv \
+	rtl/core/pipe5/anv32_fetch_c1.sv \
+	rtl/core/pipe5/anv32_decode_c1.sv \
+	rtl/core/anv32i1/anv32_execute_i_c1.sv \
+	rtl/core/pipe5/anv32_memory_c1.sv \
+	rtl/core/pipe5/anv32_writeback_c1.sv \
 	rtl/core/anv32i1/anv32i1_top.sv \
 	sim/tb/anv32i/tb_program_fetch.sv
 
@@ -175,13 +175,13 @@ ANV32I1_TOP_SRC := \
 	rtl/core/common/anv32_decoder.sv \
 	rtl/core/common/anv32_csr.sv \
 	rtl/core/common/anv32_csr_exec.sv \
-	rtl/core/anv32i1/stages/anv32i1_fetch_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_D_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_E_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_M_stage.sv \
-	rtl/core/anv32i1/stages/anv32i1_W_stage.sv \
+	rtl/core/pipe5/anv32_fetch_c1.sv \
+	rtl/core/pipe5/anv32_decode_c1.sv \
+	rtl/core/anv32i1/anv32_execute_i_c1.sv \
+	rtl/core/pipe5/anv32_memory_c1.sv \
+	rtl/core/pipe5/anv32_writeback_c1.sv \
 	rtl/core/anv32i1/anv32i1_top.sv \
-	rtl/core/anv32i1/anv32i1_hazard_unit.sv
+	rtl/core/pipe5/anv32_hazard_basic.sv
 
 SRC_cpu_trace := \
 	$(ANV32I1_TOP_SRC) \

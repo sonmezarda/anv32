@@ -1,4 +1,4 @@
-module anv32i1_hazard_unit
+module anv32_hazard_basic
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 (

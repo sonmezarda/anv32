@@ -1,4 +1,4 @@
-module anv32i1_D_stage
+module anv32_decode_c1
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 (

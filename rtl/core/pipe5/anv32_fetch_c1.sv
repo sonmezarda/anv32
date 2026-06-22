@@ -1,12 +1,12 @@
 // ============================================================================
-// anv32i1_fetch_stage.sv
+// anv32_fetch_c1.sv
 
 // Interface:
 //   fetch_addr_o -> RAM address (live fetch pointer)
 //   instr_i      <- RAM registered read data
-//   pc_o/instr_o/instr_valid_o -> aligned packet for the decode stage
+//   finstr_o     -> aligned packet for the decode stage
 // ============================================================================
-module anv32i1_fetch_stage
+module anv32_fetch_c1
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 #(

@@ -1,6 +1,6 @@
 // ============================================================================
-// anv32i1_DE_stage_tb.sv
-// Self-checking testbench for the refactored decode+execute stage.
+// anv32_decode_execute_c1_tb.sv
+// Self-checking testbench for the decode_c1 + execute_i_c1 path.
 //
 // ASSUMES the post-refactor interfaces:
 //   anv32_alu       : ports (op_i: alu_op_e, a_i, b_i, result_o)
@@ -8,14 +8,14 @@
 //   einstr_t        : has link_pc + control passthrough (rd_idx, rd_valid,
 //                     wb_sel, is_mem, is_pc_changer, is_halt, pc, id, op)
 //
-// Compile order: config_pkg, isa_pkg, alu, decoder, DE_stage, this tb.
+// Compile order: config_pkg, isa_pkg, alu, decoder, decode/execute, this tb.
 // Strategy: encode real RV32I instructions independently of the decoder,
 // hand-compute golden values, drive, clock once (output is registered),
 // then check. A behavioural regfile answers the DUT's index outputs async.
 // ============================================================================
 `timescale 1ns/1ps
 
-module anv32i1_DE_stage_tb
+module anv32_decode_execute_c1_tb
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 ;
@@ -39,6 +39,11 @@ module anv32i1_DE_stage_tb
     logic [XLEN-1:0]   pc_target;
     logic              pc_changer;
     logic              e_valid;
+    logic              trap_req;
+    logic [XLEN-1:0]   trap_pc;
+    logic [XLEN-1:0]   trap_cause;
+    logic [XLEN-1:0]   trap_tval;
+    logic              mret_req;
 
     // ---------------- behavioural register file (async read) ---------------
     logic [XLEN-1:0] xreg [0:31];
@@ -46,7 +51,7 @@ module anv32i1_DE_stage_tb
     assign rs2_rdata = (rs2_idx == 5'd0) ? '0 : xreg[rs2_idx];
 
     // ---------------- DUT ---------------------------------------------------
-    anv32i1_D_stage d_stage (
+    anv32_decode_c1 d_stage (
         .clk_i      (clk),
         .rst_i      (rst),
         .stall_i    (stall),
@@ -62,7 +67,7 @@ module anv32i1_DE_stage_tb
         .dinstr_o   (dinstr)
     );
 
-    anv32i1_E_stage e_stage (
+    anv32_execute_i_c1 e_stage (
         .clk_i          (clk),
         .rst_i          (rst),
         .stall_i        (1'b0),
@@ -75,7 +80,12 @@ module anv32i1_DE_stage_tb
         .pc_target_o    (pc_target),
         .pc_changer_o   (pc_changer),
         .valid_o        (e_valid),
-        .einstr_o       (einstr)
+        .einstr_o       (einstr),
+        .trap_req_o     (trap_req),
+        .trap_pc_o      (trap_pc),
+        .trap_cause_o   (trap_cause),
+        .trap_tval_o    (trap_tval),
+        .mret_req_o     (mret_req)
     );
 
     // =======================================================================

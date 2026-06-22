@@ -165,7 +165,7 @@ module anv32i1_top
     assign stall_m_eff  = stall_i;
     assign stall_w_eff  = stall_i;
 
-    anv32i1_hazard_unit hazard_unit(
+    anv32_hazard_basic hazard_unit(
         .clk_i(clk_i), 
         .rst_i(rst_i), 
         .stall_i(1'b0),
@@ -180,7 +180,7 @@ module anv32i1_top
         .rs2_fwd_sel(rs2_fwd_sel),
         .flush_D_o(flush_D)
     );
-    anv32i1_fetch_stage #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
+    anv32_fetch_c1 #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
         .clk_i(clk_i), 
         .rst_i(rst_i), 
         .stall_i(stall_f_eff),
@@ -247,7 +247,7 @@ module anv32i1_top
         end
     end
 
-    anv32i1_D_stage D(
+    anv32_decode_c1 D(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .flush_i(flush_D),
@@ -263,7 +263,7 @@ module anv32i1_top
         .dinstr_o(dinstr)
     );
 
-    anv32i1_E_stage E(
+    anv32_execute_i_c1 E(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .stall_i(stall_e_eff),
@@ -286,7 +286,7 @@ module anv32i1_top
 
     );
 
-    anv32i1_M_stage M(
+    anv32_memory_c1 M(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .stall_i(stall_m_eff),
@@ -299,7 +299,7 @@ module anv32i1_top
         .minstr_o(minstr)
     );
 
-    anv32i1_W_stage W(
+    anv32_writeback_c1 W(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .stall_i(stall_w_eff),
