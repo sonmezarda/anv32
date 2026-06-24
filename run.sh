@@ -1,4 +1,4 @@
-verilator --lint-only --timing \
+verilator --binary --timing \
     rtl/include/anv32_config_pkg.sv \
     rtl/include/anv32_isa_pkg.sv \
     rtl/core/common/anv32_decoder.sv \
@@ -9,9 +9,10 @@ verilator --lint-only --timing \
     rtl/core/common/anv32_regfile.sv\
     rtl/core/pipe5/anv32_fetch_c1.sv \
     rtl/core/pipe5/anv32_decode_c1.sv \
-    rtl/core/anv32i1/anv32_execute_i_c1.sv \
+    rtl/core/anv32im1/anv32_execute_im.sv \
     rtl/core/pipe5/anv32_memory_c1.sv \
     rtl/core/pipe5/anv32_writeback_c1.sv \
     rtl/core/pipe5/anv32_hazard_basic.sv \
-    rtl/core/anv32i1/anv32i1_top.sv \
-    --top-module anv32i1_top -Wno-TIMESCALEMOD -Wno-WIDTHEXPAND
+    rtl/core/anv32im1/anv32im1_top.sv \
+    sim/tb/anv32im/tb_cpu_trace.sv\
+    --top-module tb_cpu_trace -Wno-TIMESCALEMOD -Wno-WIDTHEXPAND -Wno-UNSIGNED

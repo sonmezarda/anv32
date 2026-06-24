@@ -3,9 +3,13 @@ static int add(int a, int b)
     return a + b;
 }
 
+static int mul(int a, int b){
+    return a * b;
+}
+
 int main(void)
 {
     volatile int a = 10;
     volatile int b = 20;
-    return add(a, b);
+    return add(a, b) + mul(a, b);
 }

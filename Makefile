@@ -183,9 +183,27 @@ ANV32I1_TOP_SRC := \
 	rtl/core/anv32i1/anv32i1_top.sv \
 	rtl/core/pipe5/anv32_hazard_basic.sv
 
+ANV32IM1_TOP_SRC := \
+	$(COMMON_PKGS) \
+    rtl/core/common/anv32_decoder.sv \
+    rtl/core/common/anv32_csr.sv \
+    rtl/core/common/anv32_csr_exec.sv \
+    rtl/common/mem/anv32_bram_tdp.sv \
+    rtl/core/common/anv32_alu.sv \
+    rtl/core/common/anv32_regfile.sv \
+    rtl/core/pipe5/anv32_fetch_c1.sv \
+    rtl/core/pipe5/anv32_decode_c1.sv \
+	rtl/core/common/anv32_mul_comb.sv \
+	rtl/core/common/anv32_div.sv \
+    rtl/core/anv32im1/anv32_execute_im.sv \
+    rtl/core/pipe5/anv32_memory_c1.sv \
+    rtl/core/pipe5/anv32_writeback_c1.sv \
+    rtl/core/pipe5/anv32_hazard_basic.sv \
+    rtl/core/anv32im1/anv32im1_top.sv
+
 SRC_cpu_trace := \
-	$(ANV32I1_TOP_SRC) \
-	sim/tb/anv32i/tb_cpu_trace.sv
+	$(ANV32IM1_TOP_SRC) \
+	sim/tb/anv32im/tb_cpu_trace.sv
 
 VERILATOR_WARNINGS_QUIET := \
 	-Wno-DECLFILENAME \
@@ -213,7 +231,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run asm-run fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -358,26 +376,50 @@ fpga-asm:
 
 cpu-run:
 	@set -euo pipefail; \
-	src="$(C_SRC)"; \
-	name="$(SW_NAME)"; \
-	work_dir="$(SW_KEEP_DIR)"; \
+	if [ -n "$(ASM)" ]; then \
+		src="$(ASM_SRC)"; \
+		name="$(ASM_NAME)"; \
+		work_dir="$(ASM_KEEP_DIR)"; \
+		build_type="ASM"; \
+	else \
+		src="$(C_SRC)"; \
+		name="$(SW_NAME)"; \
+		work_dir="$(SW_KEEP_DIR)"; \
+		build_type="C"; \
+	fi; \
 	mkdir -p "$$work_dir"; \
-	echo "SW build: $$src -> $$work_dir"; \
-	$(PYTHON) $(BUILD_RV32) \
-		--src "$$src" \
-		--out-dir "$$work_dir" \
-		--name "$$name" \
-		--cc "$(SW_CC)" \
-		--march "$(SW_ARCH)" \
-		--mabi "$(SW_ABI)" \
-		--objcopy "$(SW_OBJCOPY)" \
-		--objdump "$(SW_OBJDUMP)" \
-		--linker "$(LINKER)" \
-		--bin-to-hex "$(BIN_TO_HEX)" \
-		--split-hex "$(HEX_SPLIT)" \
-		--python "$(PYTHON)"; \
+	echo "Build: $$src -> $$work_dir"; \
+	if [ "$$build_type" = "ASM" ]; then \
+		$(PYTHON) $(BUILD_RV32_ASM) \
+			--src "$$src" \
+			--out-dir "$$work_dir" \
+			--name "$$name" \
+			--cc "$(SW_CC)" \
+			--march "$(SW_ARCH)" \
+			--mabi "$(SW_ABI)" \
+			--objcopy "$(SW_OBJCOPY)" \
+			--objdump "$(SW_OBJDUMP)" \
+			--linker "$(LINKER)" \
+			--bin-to-hex "$(BIN_TO_HEX)" \
+			--split-hex "$(HEX_SPLIT)" \
+			--python "$(PYTHON)"; \
+	else \
+		$(PYTHON) $(BUILD_RV32) \
+			--src "$$src" \
+			--out-dir "$$work_dir" \
+			--name "$$name" \
+			--cc "$(SW_CC)" \
+			--march "$(SW_ARCH)" \
+			--mabi "$(SW_ABI)" \
+			--objcopy "$(SW_OBJCOPY)" \
+			--objdump "$(SW_OBJDUMP)" \
+			--linker "$(LINKER)" \
+			--bin-to-hex "$(BIN_TO_HEX)" \
+			--split-hex "$(HEX_SPLIT)" \
+			--python "$(PYTHON)"; \
+	fi; \
 	echo; \
-	echo "Compiler assembly: $$work_dir/$$name.s"; \
+	echo "Source: $$src"; \
 	echo "Linked disassembly: $$work_dir/$$name.dump"; \
 	echo "Memory image: $$work_dir/$$name.hex and $$work_dir/$${name}_lane[0-3].hex"; \
 	echo; \
@@ -410,62 +452,6 @@ cpu-run:
 	if [ "$(TRACE)" = "1" ]; then \
 		echo "Waveform: $(OBJ_DIR)/cpu_trace.vcd"; \
 	fi
-
-asm-run:
-	@set -euo pipefail; \
-	src="$(ASM_SRC)"; \
-	name="$(ASM_NAME)"; \
-	work_dir="$(ASM_KEEP_DIR)"; \
-	mkdir -p "$$work_dir"; \
-	echo "ASM build: $$src -> $$work_dir"; \
-	$(PYTHON) $(BUILD_RV32_ASM) \
-		--src "$$src" \
-		--out-dir "$$work_dir" \
-		--name "$$name" \
-		--cc "$(SW_CC)" \
-		--march "$(SW_ARCH)" \
-		--mabi "$(SW_ABI)" \
-		--objcopy "$(SW_OBJCOPY)" \
-		--objdump "$(SW_OBJDUMP)" \
-		--linker "$(LINKER)" \
-		--bin-to-hex "$(BIN_TO_HEX)" \
-		--split-hex "$(HEX_SPLIT)" \
-		--python "$(PYTHON)"; \
-	echo; \
-	echo "Assembly source: $$src"; \
-	echo "Linked disassembly: $$work_dir/$$name.dump"; \
-	echo "Memory image: $$work_dir/$$name.hex and $$work_dir/$${name}_lane[0-3].hex"; \
-	echo; \
-	echo "---- linked disassembly (first $(ASM_LINES) lines) ----"; \
-	sed -n '1,$(ASM_LINES)p' "$$work_dir/$$name.dump"; \
-	echo "---- cpu trace ($(CYCLES) cycles max) ----"; \
-	trace_flags=""; \
-	trace_arg=""; \
-	if [ "$(TRACE)" = "1" ]; then \
-		trace_flags="--trace"; \
-		trace_arg="+trace"; \
-	fi; \
-	if [ "$(DETAIL)" = "1" ]; then \
-		trace_arg="$$trace_arg +detail"; \
-	fi; \
-	if [ -n "$(PIPELINE_LOG)" ]; then \
-		mkdir -p "$$(dirname "$(PIPELINE_LOG)")"; \
-		trace_arg="$$trace_arg +log=$(PIPELINE_LOG)"; \
-	fi; \
-	$(VERILATOR) $(VERILATOR_FLAGS) $$trace_flags \
-		--top-module tb_cpu_trace \
-		-GINIT_FILE=\"$$work_dir/$$name\" \
-		-GMAX_CYCLES=$(CYCLES) \
-		-GPC_RESET_VALUE=$(PC_RESET_VALUE) \
-		$(SRC_cpu_trace); \
-	$(OBJ_DIR)/Vtb_cpu_trace $$trace_arg; \
-	if [ -n "$(PIPELINE_LOG)" ]; then \
-		echo "Pipeline log: $(PIPELINE_LOG)"; \
-	fi; \
-	if [ "$(TRACE)" = "1" ]; then \
-		echo "Waveform: $(OBJ_DIR)/cpu_trace.vcd"; \
-	fi
-
 asm-golden-run:
 	@set -euo pipefail; \
 	src="$(GOLDEN_ASM_SRC)"; \
@@ -589,9 +575,7 @@ help:
 	@echo "  make sw-fetch KEEP=asm,hex,lanes"
 	@echo "                       Keep selected intermediates under $(SW_KEEP_DIR)"
 	@echo "  make cpu-run C=file.c"
-	@echo "                       Build C, print disassembly, run top-level CPU trace"
-	@echo "  make asm-run ASM=file.S"
-	@echo "                       Build assembly, print disassembly, run CPU trace"
+	@echo "                       Build C or ASM, print disassembly, run top-level CPU trace"
 	@echo "  make fpga FILE=file.c"
 	@echo "                       Build C for Gowin BRAM image under $(FPGA_DIR)"
 	@echo "  make fpga FILE=file.S"
@@ -613,13 +597,13 @@ help:
 	@echo "Variables:"
 	@echo "  PROG=name            Program base name in $(HEX_DIR) (default prog)"
 	@echo "  C_SRC=file.c         C source for sw-fetch (default $(C_SRC))"
-	@echo "  ASM_SRC=file.S       Assembly source for asm-run (default $(ASM_SRC))"
+	@echo "  ASM_SRC=file.S       Assembly source for cpu-run when ASM=file.S (default $(ASM_SRC))"
 	@echo "  FILE=file.c|file.S   Source for make fpga"
 	@echo "  FPGA_PROG=name       Gowin BRAM image base in $(FPGA_DIR) (default prog)"
 	@echo "  GOLDEN_ASM_SRC=file.S"
 	@echo "                       Assembly source for asm-golden-run"
 	@echo "  SW_NAME=name         Artifact base name (default from C_SRC)"
-	@echo "  ASM_NAME=name        Artifact base name for asm-run"
+	@echo "  ASM_NAME=name        Artifact base name for cpu-run when ASM=file.S"
 	@echo "  LINKER=file.ld       Linker for normal C/ASM runs (default $(LINKER))"
 	@echo "  GOLDEN_LINKER=file.ld"
 	@echo "                       Linker for Spike-compatible golden runs"

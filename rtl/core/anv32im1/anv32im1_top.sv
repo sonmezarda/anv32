@@ -2,7 +2,7 @@ module anv32im1_top
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 #(
-    parameter bit              HAS_M          = 1'b0,
+    parameter bit              HAS_M          = 1'b1,
     parameter logic [XLEN-1:0] PC_RESET_VALUE = RESET_PC
 )(
     input  logic            clk_i, rst_i, stall_i, pc_jmp_en_i,
