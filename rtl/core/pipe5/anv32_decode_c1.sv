@@ -25,8 +25,8 @@ module anv32_decode_c1
 
     always_comb begin
         decoded_gated           = decoded;
-        decoded_gated.valid     = finstr_i.valid && decoded.valid;
-        decoded_gated.exc_valid = finstr_i.valid && decoded.exc_valid;
+        decoded_gated.valid     = finstr_i.valid && decoded.valid && !flush_i;
+        decoded_gated.exc_valid = finstr_i.valid && decoded.exc_valid && !flush_i;
     end
 
     assign dinstr_decode_o = decoded_gated;
@@ -45,7 +45,7 @@ module anv32_decode_c1
     always_ff @(posedge clk_i) begin
         if (rst_i) begin
             dinstr_o <= '0;
-        end else if (flush_i || stall_i) begin
+        end else if (stall_i) begin
             dinstr_o <= '0;
         end else begin
             dinstr_o           <= decoded_gated;

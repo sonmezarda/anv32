@@ -2,7 +2,7 @@ module anv32_execute_im
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 #(
-    parameter bit HAS_M = 1'b0
+    parameter bit HAS_M = 1'b1
 )(
     input  logic               clk_i,
     input  logic               rst_i,
@@ -14,7 +14,6 @@ module anv32_execute_im
     input  logic    [XLEN-1:0] rs2_rdata_i,
     input  logic    [XLEN-1:0] csr_rdata_i,
 
-    output logic               branch_taken_o,
     output logic    [XLEN-1:0] pc_target_o,
     output logic               pc_changer_o,
     output logic               valid_o,
@@ -31,7 +30,7 @@ module anv32_execute_im
     logic [XLEN-1:0] alu_a, alu_b, alu_result;
     logic [XLEN-1:0] csr_wdata, csr_rd_wdata;
     logic [XLEN-1:0] pc_plus4, pc_target;
-    logic            branch_taken, csr_we;
+    logic            csr_we;
 
     logic [XLEN-1:0] muldiv_result;
     logic            md_stall;
@@ -97,19 +96,6 @@ module anv32_execute_im
     assign pc_plus4  = dinstr_i.pc + 32'd4;
     assign pc_target = (dinstr_i.op == JALR) ? (alu_result & ~32'd1) : alu_result;
 
-    always_comb begin : branch_taken_comb
-        unique case (dinstr_i.op)
-            JAL, JALR: branch_taken = 1'b1;
-            BEQ:  branch_taken = (rs1_rdata_i == rs2_rdata_i);
-            BNE:  branch_taken = (rs1_rdata_i != rs2_rdata_i);
-            BLT:  branch_taken = ($signed(rs1_rdata_i) <  $signed(rs2_rdata_i));
-            BGE:  branch_taken = ($signed(rs1_rdata_i) >= $signed(rs2_rdata_i));
-            BLTU: branch_taken = (rs1_rdata_i <  rs2_rdata_i);
-            BGEU: branch_taken = (rs1_rdata_i >= rs2_rdata_i);
-            default: branch_taken = 1'b0;
-        endcase
-    end
-
     anv32_alu alu (
         .op_i    (dinstr_i.alu_op),
         .a_i     (alu_a),
@@ -129,7 +115,6 @@ module anv32_execute_im
         .rd_wdata_o (csr_rd_wdata)
     );
 
-    assign branch_taken_o = branch_taken;
     assign pc_target_o    = pc_target;
     assign pc_changer_o   = dinstr_i.is_pc_changer;
     assign valid_o        = dinstr_i.valid;
@@ -144,7 +129,7 @@ module anv32_execute_im
                                                                      alu_result;
             einstr_o.write_data    <= rs2_rdata_i;
             einstr_o.link_pc       <= pc_plus4;
-            einstr_o.branch_taken  <= branch_taken;
+            einstr_o.branch_taken  <= 1'b0;
             einstr_o.pc_target     <= pc_target;
             einstr_o.rd_idx        <= dinstr_i.rd_idx;
             einstr_o.rd_valid      <= dinstr_i.rd_valid;

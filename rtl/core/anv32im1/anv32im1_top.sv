@@ -56,6 +56,7 @@ module anv32im1_top
     logic [XLEN-1:0]        csr_wdata, mtvec, mepc;
     logic                   e_branch_taken;
     logic [XLEN-1:0]        e_pc_target;
+    (* keep *) logic [XLEN-1:0] rs1_brc, rs2_brc;
     logic                   e_pc_changer, e_valid;
 
     // muldiv stall (E stage'den, HAS_M=0'da sabit 0)
@@ -214,6 +215,29 @@ module anv32im1_top
         endcase
     end
 
+    always_comb begin : e_brc_fwd_mux_comb
+        if      (rs1_fwd_sel == FWD_M) rs1_brc = m_fwd_data;
+        else if (rs1_fwd_sel == FWD_W) rs1_brc = w_fwd_data;
+        else                            rs1_brc = dinstr.rs1_rdata;
+
+        if      (rs2_fwd_sel == FWD_M) rs2_brc = m_fwd_data;
+        else if (rs2_fwd_sel == FWD_W) rs2_brc = w_fwd_data;
+        else                            rs2_brc = dinstr.rs2_rdata;
+    end
+
+    always_comb begin : e_branch_cmp_comb
+        unique case (dinstr.op)
+            JAL, JALR: e_branch_taken = 1'b1;
+            BEQ:       e_branch_taken = (rs1_brc == rs2_brc);
+            BNE:       e_branch_taken = (rs1_brc != rs2_brc);
+            BLT:       e_branch_taken = ($signed(rs1_brc) <  $signed(rs2_brc));
+            BGE:       e_branch_taken = ($signed(rs1_brc) >= $signed(rs2_brc));
+            BLTU:      e_branch_taken = (rs1_brc <  rs2_brc);
+            BGEU:      e_branch_taken = (rs1_brc >= rs2_brc);
+            default:   e_branch_taken = 1'b0;
+        endcase
+    end
+
     always_comb begin : csr_d_bypass_comb
         csr_rdata_D = csr_bypass_value(csr_addr, csr_rdata);
     end
@@ -255,7 +279,6 @@ module anv32im1_top
         .rs1_rdata_i(rs1_E_din),
         .rs2_rdata_i(rs2_E_din),
         .csr_rdata_i(csr_rdata_E),
-        .branch_taken_o(e_branch_taken),
         .pc_target_o(e_pc_target),
         .pc_changer_o(e_pc_changer),
         .valid_o(e_valid),

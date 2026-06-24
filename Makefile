@@ -21,6 +21,7 @@ SW_OBJCOPY ?= riscv64-unknown-elf-objcopy
 SW_OBJDUMP ?= riscv64-unknown-elf-objdump
 SW_ARCH    ?= rv32i_zicsr
 SW_ABI     ?= ilp32
+SW_OPT     ?= -Os
 SPIKE      ?= spike
 C_SRC      ?= $(if $(C),$(C),sw/examples/smoke.c)
 SW_NAME    ?= $(basename $(notdir $(C_SRC)))
@@ -268,7 +269,8 @@ sw-fetch:
 		--linker "$(LINKER)" \
 		--bin-to-hex "$(BIN_TO_HEX)" \
 		--split-hex "$(HEX_SPLIT)" \
-		--python "$(PYTHON)"; \
+		--python "$(PYTHON)" \
+		"--opt=$(SW_OPT)"; \
 	words="$$(wc -l < "$$work_dir/$$name.hex")"; \
 	echo "Program image: $$words words"; \
 	$(VERILATOR) $(VERILATOR_FLAGS) \
@@ -339,7 +341,8 @@ fpga-c:
 		--linker "$(LINKER)" \
 		--bin-to-hex "$(BIN_TO_HEX)" \
 		--split-hex "$(HEX_SPLIT)" \
-		--python "$(PYTHON)"; \
+		--python "$(PYTHON)" \
+		"--opt=$(SW_OPT)"; \
 	cp "$$work_dir/$$name.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex"; \
 	for n in 0 1 2 3; do \
 		cp "$$work_dir/$${name}_lane$${n}.hex" "$(FPGA_DIR)/$(FPGA_PROG)_lane$${n}.hex"; \
@@ -416,7 +419,8 @@ cpu-run:
 			--linker "$(LINKER)" \
 			--bin-to-hex "$(BIN_TO_HEX)" \
 			--split-hex "$(HEX_SPLIT)" \
-			--python "$(PYTHON)"; \
+			--python "$(PYTHON)" \
+			"--opt=$(SW_OPT)"; \
 	fi; \
 	echo; \
 	echo "Source: $$src"; \
@@ -608,6 +612,7 @@ help:
 	@echo "  GOLDEN_LINKER=file.ld"
 	@echo "                       Linker for Spike-compatible golden runs"
 	@echo "  SPIKE_INSNS=n        Max Spike instructions for golden log"
+	@echo "  SW_OPT=-O2           GCC optimization level for C builds (default -Os)"
 	@echo "  KEEP=asm,hex,lanes   Keep C assembly, word hex, and lane hex"
 	@echo "  CYCLES=n             Max CPU trace cycles (default $(CYCLES))"
 	@echo "  TRACE=1              Enable Verilator VCD trace for cpu-run"
