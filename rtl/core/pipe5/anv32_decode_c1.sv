@@ -1,7 +1,9 @@
 module anv32_decode_c1
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
-(
+#(
+    parameter bit HAS_M = 1'b0
+)(
     input  logic               clk_i,
     input  logic               rst_i,
     input  logic               stall_i,
@@ -33,7 +35,7 @@ module anv32_decode_c1
     assign rs2_idx_o  = decoded.rs2_idx;
     assign csr_addr_o = decoded.csr_addr;
 
-    anv32_decoder decoder (
+    anv32_decoder #(.HAS_M(HAS_M)) decoder (
         .instr_i (finstr_i.instr),
         .pc_i    (finstr_i.pc),
         .id_i    ('0),                 // TODO: commit id

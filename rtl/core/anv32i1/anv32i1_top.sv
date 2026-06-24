@@ -20,11 +20,6 @@ module anv32i1_top
 );
     logic [XLEN-1:0] fetch_addr;
 
-    assign mem_wdata_o = dmem_wdata;
-    assign mem_addr_o  = m_stage_dmem_addr_out;
-    assign mem_we      = dmem_we;
-    assign instr_addr_o = fetch_addr;
-
     logic [XLEN-1:0]        dmem_wdata;
     logic [3:0]             dmem_we;
 
@@ -35,10 +30,6 @@ module anv32i1_top
     minstr_t                minstr;
     dinstr_t                dinstr;
     dinstr_t                dinstr_decode;
-
-    assign instr_o       = finstr.instr;
-    assign pc_o          = finstr.pc;
-    assign instr_valid_o = finstr.valid;
 
     logic                   pc_jmp_en;
     logic [XLEN-1:0]        pc_jmp_addr;
@@ -97,6 +88,15 @@ module anv32i1_top
     logic [XLEN-1:0]        csr_trap_pc;
     logic [XLEN-1:0]        csr_trap_cause;
     logic [XLEN-1:0]        csr_trap_tval;
+
+    assign mem_wdata_o = dmem_wdata;
+    assign mem_addr_o  = m_stage_dmem_addr_out;
+    assign mem_we      = dmem_we;
+    assign instr_addr_o = fetch_addr;
+
+    assign instr_o       = finstr.instr;
+    assign pc_o          = finstr.pc;
+    assign instr_valid_o = finstr.valid;
 
     function automatic logic [XLEN-1:0] csr_bypass_value(
         input logic [11:0]     csr_addr_i,
