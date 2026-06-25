@@ -34,21 +34,29 @@ module anv32_execute_im
 
     logic [XLEN-1:0] muldiv_result;
     logic            md_stall;
+    logic            is_mul_op, is_div_op;
+    logic            div_start, div_busy, div_done;
+    logic            div_active_q, div_ready_q;
+    logic            div_emit_accept;
+    logic [XLEN-1:0] div_result_q, div_emit_result;
+    logic [XLEN-1:0] div_write_data_q;
+    dinstr_t         div_dinstr_q;
 
     generate
         if (HAS_M) begin : g_muldiv
             logic [XLEN-1:0] mul_result, div_result;
-            logic            is_mul_op, is_div_op;
-            logic            div_start, div_busy, div_done;
 
             assign is_mul_op = dinstr_i.valid && (dinstr_i.op inside {MUL, MULH, MULHSU, MULHU});
             assign is_div_op = dinstr_i.valid && (dinstr_i.op inside {DIV, DIVU, REM, REMU});
 
-            assign div_start     = is_div_op;
-            assign muldiv_result = is_mul_op ? mul_result : div_result;
-            assign md_stall      = div_start && !div_done && !kill_i;
+            assign div_start     = is_div_op && !div_active_q;
+            assign muldiv_result = is_mul_op ? mul_result : div_emit_result;
+            assign md_stall      = (div_start || (div_active_q && !div_ready_q && !div_done)) && !kill_i;
+            assign div_emit_result = div_done ? div_result : div_result_q;
 
             anv32_mul_comb u_mul (
+                .clk_i   (clk_i),
+                .rst_i   (rst_i),
                 .op_i    (dinstr_i.op),
                 .a_i     (rs1_rdata_i),
                 .b_i     (rs2_rdata_i),
@@ -68,12 +76,19 @@ module anv32_execute_im
                 .result_o(div_result)
             );
         end else begin : g_no_muldiv
+            assign is_mul_op      = 1'b0;
+            assign is_div_op      = 1'b0;
+            assign div_start      = 1'b0;
+            assign div_busy       = 1'b0;
+            assign div_done       = 1'b0;
+            assign div_emit_result = '0;
             assign muldiv_result = '0;
             assign md_stall      = 1'b0;
         end
     endgenerate
 
     assign mul_div_stall_o = md_stall;
+    assign div_emit_accept = !stall_i && div_active_q && (div_ready_q || div_done);
 
     assign trap_req_o   = dinstr_i.valid && dinstr_i.exc_valid;
     assign trap_pc_o    = dinstr_i.pc;
@@ -122,29 +137,73 @@ module anv32_execute_im
     always_ff @(posedge clk_i) begin
         if (rst_i || trap_req_o || mret_req_o || kill_i) begin
             einstr_o <= '0;
+            div_active_q <= 1'b0;
+            div_ready_q <= 1'b0;
+            div_result_q <= '0;
+            div_write_data_q <= '0;
+            div_dinstr_q <= '0;
         end else if (!stall_i) begin
-            einstr_o.valid         <= dinstr_i.valid;
-            einstr_o.alu_result    <= dinstr_i.is_csr             ? csr_rd_wdata  :
-                                      (HAS_M && dinstr_i.is_muldiv)? muldiv_result :
-                                                                     alu_result;
-            einstr_o.write_data    <= rs2_rdata_i;
-            einstr_o.link_pc       <= pc_plus4;
-            einstr_o.branch_taken  <= 1'b0;
-            einstr_o.pc_target     <= pc_target;
-            einstr_o.rd_idx        <= dinstr_i.rd_idx;
-            einstr_o.rd_valid      <= dinstr_i.rd_valid;
-            einstr_o.wb_sel        <= dinstr_i.wb_sel;
-            einstr_o.op            <= dinstr_i.op;
-            einstr_o.is_mem        <= dinstr_i.is_mem;
-            einstr_o.is_pc_changer <= dinstr_i.is_pc_changer;
-            einstr_o.is_csr        <= dinstr_i.is_csr;
-            einstr_o.csr_addr      <= dinstr_i.csr_addr;
-            einstr_o.csr_we        <= csr_we;
-            einstr_o.csr_wdata     <= csr_wdata;
-            einstr_o.is_halt       <= dinstr_i.is_halt;
-            einstr_o.pc            <= dinstr_i.pc;
-            einstr_o.id            <= dinstr_i.id;
-            einstr_o.instr         <= dinstr_i.instr;
+            if (div_emit_accept) begin
+                einstr_o.valid         <= div_dinstr_q.valid;
+                einstr_o.alu_result    <= div_emit_result;
+                einstr_o.write_data    <= div_write_data_q;
+                einstr_o.link_pc       <= div_dinstr_q.pc + 32'd4;
+                einstr_o.branch_taken  <= 1'b0;
+                einstr_o.pc_target     <= '0;
+                einstr_o.rd_idx        <= div_dinstr_q.rd_idx;
+                einstr_o.rd_valid      <= div_dinstr_q.rd_valid;
+                einstr_o.wb_sel        <= div_dinstr_q.wb_sel;
+                einstr_o.op            <= div_dinstr_q.op;
+                einstr_o.is_mem        <= div_dinstr_q.is_mem;
+                einstr_o.is_pc_changer <= div_dinstr_q.is_pc_changer;
+                einstr_o.is_csr        <= div_dinstr_q.is_csr;
+                einstr_o.csr_addr      <= div_dinstr_q.csr_addr;
+                einstr_o.csr_we        <= 1'b0;
+                einstr_o.csr_wdata     <= '0;
+                einstr_o.is_halt       <= div_dinstr_q.is_halt;
+                einstr_o.pc            <= div_dinstr_q.pc;
+                einstr_o.id            <= div_dinstr_q.id;
+                einstr_o.instr         <= div_dinstr_q.instr;
+                div_active_q           <= 1'b0;
+                div_ready_q            <= 1'b0;
+            end else begin
+                einstr_o.valid         <= dinstr_i.valid;
+                einstr_o.alu_result    <= dinstr_i.is_csr             ? csr_rd_wdata  :
+                                          (HAS_M && dinstr_i.is_muldiv)? muldiv_result :
+                                                                         alu_result;
+                einstr_o.write_data    <= rs2_rdata_i;
+                einstr_o.link_pc       <= pc_plus4;
+                einstr_o.branch_taken  <= 1'b0;
+                einstr_o.pc_target     <= pc_target;
+                einstr_o.rd_idx        <= dinstr_i.rd_idx;
+                einstr_o.rd_valid      <= dinstr_i.rd_valid;
+                einstr_o.wb_sel        <= dinstr_i.wb_sel;
+                einstr_o.op            <= dinstr_i.op;
+                einstr_o.is_mem        <= dinstr_i.is_mem;
+                einstr_o.is_pc_changer <= dinstr_i.is_pc_changer;
+                einstr_o.is_csr        <= dinstr_i.is_csr;
+                einstr_o.csr_addr      <= dinstr_i.csr_addr;
+                einstr_o.csr_we        <= csr_we;
+                einstr_o.csr_wdata     <= csr_wdata;
+                einstr_o.is_halt       <= dinstr_i.is_halt;
+                einstr_o.pc            <= dinstr_i.pc;
+                einstr_o.id            <= dinstr_i.id;
+                einstr_o.instr         <= dinstr_i.instr;
+            end
+        end else if (md_stall) begin
+            einstr_o <= '0;
+        end
+
+        if (!(rst_i || trap_req_o || mret_req_o || kill_i)) begin
+            if (div_start) begin
+                div_active_q     <= 1'b1;
+                div_ready_q      <= 1'b0;
+                div_dinstr_q     <= dinstr_i;
+                div_write_data_q <= rs2_rdata_i;
+            end else if (div_active_q && div_done && !div_ready_q && !div_emit_accept) begin
+                div_ready_q  <= 1'b1;
+                div_result_q <= div_emit_result;
+            end
         end
     end
 endmodule

@@ -140,15 +140,15 @@ module anv32im1_top
         end
     end
 
-    // --- stall routing: md_stall, harici stall_i ile aynı sınıfta (5 stage) ---
+    // --- stall routing: multi-cycle E stalls upstream while M/W drain ---
     assign md_stall    = e_mul_div_stall;            // HAS_M=0 -> execute tie-off 0
 
     assign stall_e     = md_stall;
     assign stall_f_eff = stall_i || stall_f || md_stall;
     assign stall_d_eff = stall_i || stall_d || md_stall;
     assign stall_e_eff = stall_i || stall_e;
-    assign stall_m_eff = stall_i || md_stall;
-    assign stall_w_eff = stall_i || md_stall;
+    assign stall_m_eff = stall_i;
+    assign stall_w_eff = stall_i;
 
     anv32_hazard_basic hazard_unit(
         .clk_i(clk_i),

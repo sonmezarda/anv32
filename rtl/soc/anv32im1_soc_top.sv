@@ -5,10 +5,12 @@ module anv32im1_soc_top(
     output logic [3:0] debug_leds
 );
     localparam int BRAM_ADDR_W = 10;
+    localparam int POR_CYCLES  = 8;
     localparam logic [31:0] LED_ADDR             = 32'h1000_0000;
     localparam logic [31:0] GPIO_IRQ_PENDING_ADDR = 32'h1000_0010;
 
     logic rst_i;
+    logic [POR_CYCLES-1:0] por_shift = '0;
     logic [31:0] led_reg;
     logic        gpio_irq_pending;
 
@@ -36,7 +38,12 @@ module anv32im1_soc_top(
 
     logic gpio_irq_reg, gpio_irq_reg2, gpio_irq_reg2_q, gpio_irq_rise;
 
-    assign rst_i = ~rst_n_i;
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i) por_shift <= '0;
+        else          por_shift <= {por_shift[POR_CYCLES-2:0], 1'b1};
+    end
+
+    assign rst_i = ~por_shift[POR_CYCLES-1];
     assign debug_leds = ~led_reg[3:0];
     assign imem_addr = instr_addr[BRAM_ADDR_W+1:2];
     assign dmem_addr = mem_addr[BRAM_ADDR_W+1:2];
