@@ -2,12 +2,18 @@ module anv32im2_soc_top(
     input  logic clk_i,
     input  logic rst_n_i,
     input  logic gpio_irq_i,
+    input  logic uart_rx_i,
+    output logic uart_tx_o,
     output logic [3:0] debug_leds
 );
     localparam int BRAM_ADDR_W = 10;
     localparam int POR_CYCLES  = 8;
-    localparam logic [31:0] LED_ADDR             = 32'h1000_0000;
+    localparam logic [31:0] LED_ADDR              = 32'h1000_0000;
     localparam logic [31:0] GPIO_IRQ_PENDING_ADDR = 32'h1000_0010;
+    localparam logic [31:0] UART_TXDATA_ADDR      = 32'h1000_1000;
+    localparam logic [31:0] UART_STATUS_ADDR      = 32'h1000_1004;
+    localparam logic [31:0] UART_BAUD_ADDR        = 32'h1000_1008;
+    localparam logic [31:0] UART_ERROR_ADDR       = 32'h1000_100C;
 
     logic rst_i;
     logic [POR_CYCLES-1:0] por_shift = '0;
@@ -31,12 +37,34 @@ module anv32im2_soc_top(
     logic                   led_write;
     logic                   gpio_irq_pending_sel;
     logic                   gpio_irq_pending_clear;
+    logic                   uart_txdata_sel;
+    logic                   uart_status_sel;
+    logic                   uart_baud_sel;
+    logic                   uart_error_sel;
+    logic                   uart_tx_write;
+    logic                   uart_baud_write;
+    logic                   uart_error_clear;
     logic                   mmio_sel;
     logic                   mmio_sel_q;
     logic [31:0]            mmio_rdata;
     logic [31:0]            mmio_rdata_q;
 
     logic gpio_irq_reg, gpio_irq_reg2, gpio_irq_reg2_q, gpio_irq_rise;
+    logic [31:0] uart_baud_rate;
+    logic        uart_tx_ready;
+    logic        uart_tx_full;
+    logic        uart_tx_empty;
+    logic        uart_tx_busy;
+    logic        uart_tx_done;
+    logic [7:0]  uart_rx_data;
+    logic        uart_rx_valid;
+    logic        uart_rx_empty;
+    logic        uart_rx_full;
+    logic        uart_rx_busy;
+    logic        uart_framing_error;
+    logic        uart_rx_overflow;
+    logic        uart_framing_error_pulse;
+    logic        uart_rx_overflow_pulse;
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_shift <= '0;
@@ -49,12 +77,31 @@ module anv32im2_soc_top(
     assign dmem_addr = mem_addr[BRAM_ADDR_W+1:2];
     assign led_sel = (mem_addr == LED_ADDR);
     assign gpio_irq_pending_sel = (mem_addr == GPIO_IRQ_PENDING_ADDR);
-    assign mmio_sel = led_sel || gpio_irq_pending_sel;
+    assign uart_txdata_sel = (mem_addr == UART_TXDATA_ADDR);
+    assign uart_status_sel = (mem_addr == UART_STATUS_ADDR);
+    assign uart_baud_sel   = (mem_addr == UART_BAUD_ADDR);
+    assign uart_error_sel  = (mem_addr == UART_ERROR_ADDR);
+    assign mmio_sel = led_sel || gpio_irq_pending_sel || uart_txdata_sel ||
+                      uart_status_sel || uart_baud_sel || uart_error_sel;
     assign led_write = led_sel && (mem_we != 4'b0);
     assign gpio_irq_pending_clear = gpio_irq_pending_sel && (mem_we != 4'b0) && mem_wdata[0];
+    assign uart_tx_write    = uart_txdata_sel && (mem_we != 4'b0);
+    assign uart_baud_write  = uart_baud_sel && (mem_we != 4'b0);
+    assign uart_error_clear = uart_error_sel && (mem_we != 4'b0) && mem_wdata[0];
     assign dmem_we = mmio_sel ? 4'b0 : mem_we;
     assign mmio_rdata = led_sel ? led_reg :
                         gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
+                        uart_status_sel ? {24'b0,
+                                           uart_rx_busy,
+                                           uart_rx_full,
+                                           uart_rx_empty,
+                                           uart_rx_valid,
+                                           uart_tx_done,
+                                           uart_tx_busy,
+                                           uart_tx_empty,
+                                           uart_tx_ready} :
+                        uart_baud_sel ? uart_baud_rate :
+                        uart_error_sel ? {30'b0, uart_rx_overflow, uart_framing_error} :
                         32'b0;
     assign mem_rdata = mmio_sel_q ? mmio_rdata_q : dmem_rdata;
     assign gpio_irq_rise = gpio_irq_reg2 && !gpio_irq_reg2_q;
@@ -66,10 +113,13 @@ module anv32im2_soc_top(
             gpio_irq_reg2   <= 1'b0;
             gpio_irq_reg2_q <= 1'b0;
             gpio_irq_pending <= 1'b0;
+            uart_baud_rate  <= 32'd115200;
             mmio_sel_q      <= 1'b0;
             mmio_rdata_q    <= 32'b0;
         end else if (led_write) begin
             led_reg <= mem_wdata;
+        end else if (uart_baud_write) begin
+            uart_baud_rate <= mem_wdata;
         end
 
         if (!rst_i) begin
@@ -89,6 +139,37 @@ module anv32im2_soc_top(
         end
     end
 
+    uart_top #(
+        .CLK_FREQ      (27_000_000),
+        .TX_FIFO_DEPTH (16),
+        .RX_FIFO_DEPTH (16),
+        .USE_TX_FIFO   (1'b1),
+        .USE_RX_FIFO   (1'b1)
+    ) uart (
+        .clk_i                  (clk_i),
+        .rst_i                  (rst_i),
+        .baud_rate_i            (uart_baud_rate),
+        .uart_rx_i              (uart_rx_i),
+        .uart_tx_o              (uart_tx_o),
+        .tx_data_i              (mem_wdata[7:0]),
+        .tx_valid_i             (uart_tx_write),
+        .tx_ready_o             (uart_tx_ready),
+        .tx_full_o              (uart_tx_full),
+        .tx_empty_o             (uart_tx_empty),
+        .tx_busy_o              (uart_tx_busy),
+        .tx_done_o              (uart_tx_done),
+        .rx_read_i              (1'b0),
+        .rx_data_o              (uart_rx_data),
+        .rx_valid_o             (uart_rx_valid),
+        .rx_empty_o             (uart_rx_empty),
+        .rx_full_o              (uart_rx_full),
+        .rx_busy_o              (uart_rx_busy),
+        .error_clear_i          (uart_error_clear),
+        .framing_error_o        (uart_framing_error),
+        .rx_overflow_o          (uart_rx_overflow),
+        .framing_error_pulse_o  (uart_framing_error_pulse),
+        .rx_overflow_pulse_o    (uart_rx_overflow_pulse)
+    );
 
     anv32im2_top core (
         .clk_i(clk_i), 

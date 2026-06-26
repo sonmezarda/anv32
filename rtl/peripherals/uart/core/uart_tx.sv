@@ -22,7 +22,7 @@ module uart_tx
     } state_t;
 
     state_t state_q;
-    logic [3:0] bit_idx;
+    logic [2:0] bit_idx;
     logic [7:0] data_reg;
     logic       start_pending;
     logic       stop_active;
@@ -36,7 +36,7 @@ module uart_tx
             busy_o           <= 1'b0;
             tx_o             <= IDLE_STATE_BIT;
             done_o           <= 1'b0;
-            bit_idx          <= 4'b0;
+            bit_idx          <= 3'd0;
             start_pending    <= 1'b0;
             stop_active      <= 1'b0;
         end else begin
@@ -53,7 +53,7 @@ module uart_tx
                     ST_IDLE: begin
                         if(start_pending) begin
                             state_q          <= ST_DATA;
-                            bit_idx          <= 4'b0;
+                            bit_idx          <= 3'd0;
                             tx_o             <= START_BIT;
                             done_o           <= 1'b0;
                             start_pending    <= 1'b0;
