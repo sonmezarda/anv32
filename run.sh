@@ -13,6 +13,7 @@ verilator --binary --timing \
     rtl/core/pipe5/anv32_memory_c1.sv \
     rtl/core/pipe5/anv32_writeback_c1.sv \
     rtl/core/pipe5/anv32_hazard_basic.sv \
+    rtl/core/pipe5/anv32_forward_unit.sv \
     rtl/core/anv32im1/anv32im1_top.sv \
     sim/tb/anv32im/tb_cpu_trace.sv\
     --top-module tb_cpu_trace -Wno-TIMESCALEMOD -Wno-WIDTHEXPAND -Wno-UNSIGNED

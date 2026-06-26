@@ -19,14 +19,17 @@ module anv32im1_top
     output logic [XLEN-1:0] mem_addr_o,
     output logic [3:0]      mem_we
 );
-    logic [XLEN-1:0] fetch_addr;
 
-    
+// #region INTERNAL SIGNAL DEFINES
+
+
+
+    logic [XLEN-1:0] fetch_addr;
 
     logic [XLEN-1:0]        dmem_wdata;
     logic [3:0]             dmem_we;
 
-    logic                   stall_f, stall_d, stall_e, stall_m, stall_w;
+    logic                   stall_f, stall_d, stall_e;
 
     finstr_t                finstr;
     einstr_t                einstr;
@@ -47,7 +50,6 @@ module anv32im1_top
     logic                   flush_D;
     fwd_sel_e               rs1_fwd_sel, rs2_fwd_sel;
     logic                   stall_f_eff, stall_d_eff, stall_e_eff, stall_m_eff, stall_w_eff;
-    logic [XLEN-1:0]        m_fwd_data, w_fwd_data;
     logic [XLEN-1:0]        rs1_D_din, rs2_D_din, rs1_E_din, rs2_E_din;
     logic [11:0]            csr_addr;
     logic [XLEN-1:0]        csr_rdata, csr_rdata_D, csr_rdata_E;
@@ -56,7 +58,6 @@ module anv32im1_top
     logic [XLEN-1:0]        csr_wdata, mtvec, mepc;
     logic                   e_branch_taken;
     logic [XLEN-1:0]        e_pc_target;
-    (* keep *) logic [XLEN-1:0] rs1_brc, rs2_brc;
     logic                   e_pc_changer, e_valid;
 
     // muldiv stall (E stage'den, HAS_M=0'da sabit 0)
@@ -72,6 +73,8 @@ module anv32im1_top
     logic                   csr_trap;
     logic [XLEN-1:0]        csr_trap_pc, csr_trap_cause, csr_trap_tval;
 
+// #endregion
+   
     assign mem_wdata_o  = dmem_wdata;
     assign mem_addr_o   = m_stage_dmem_addr_out;
     assign mem_we       = dmem_we;
@@ -166,6 +169,23 @@ module anv32im1_top
         .flush_D_o(flush_D)
     );
 
+    anv32_forward_unit fwd_unit (
+        .rs1_idx_i     (rs1_idx),
+        .rs2_idx_i     (rs2_idx),
+        .rs1_rdata_i   (rs1_rdata),
+        .rs2_rdata_i   (rs2_rdata),
+        .dinstr_i      (dinstr),
+        .einstr_i      (einstr),
+        .minstr_i      (minstr),
+        .rs1_fwd_sel_i (rs1_fwd_sel),
+        .rs2_fwd_sel_i (rs2_fwd_sel),
+        .rd_wdata_i    (rd_wdata),
+        .rs1_D_din_o   (rs1_D_din),
+        .rs2_D_din_o   (rs2_D_din),
+        .rs1_E_din_o   (rs1_E_din),
+        .rs2_E_din_o   (rs2_E_din)
+    );
+
     anv32_fetch_c1 #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
         .clk_i(clk_i),
         .rst_i(rst_i),
@@ -177,63 +197,15 @@ module anv32im1_top
         .finstr_o(finstr)
     );
 
-    always_comb begin : m_fwd_data_comb
-        unique case (einstr.wb_sel)
-            WB_ALU:  m_fwd_data = einstr.alu_result;
-            WB_PC4:  m_fwd_data = einstr.link_pc;
-            default: m_fwd_data = '0;
-        endcase
-    end
-
-    assign w_fwd_data = rd_wdata;
-
-    always_comb begin : d_bypass_mux_comb
-        if (minstr.valid && minstr.rd_valid && minstr.rd_idx != 5'd0 &&
-            minstr.rd_idx == rs1_idx) begin
-            rs1_D_din = w_fwd_data;
-        end else begin
-            rs1_D_din = rs1_rdata;
-        end
-        if (minstr.valid && minstr.rd_valid && minstr.rd_idx != 5'd0 &&
-            minstr.rd_idx == rs2_idx) begin
-            rs2_D_din = w_fwd_data;
-        end else begin
-            rs2_D_din = rs2_rdata;
-        end
-    end
-
-    always_comb begin : e_fwd_mux_comb
-        unique case (rs1_fwd_sel)
-            FWD_M:   rs1_E_din = m_fwd_data;
-            FWD_W:   rs1_E_din = w_fwd_data;
-            default: rs1_E_din = dinstr.rs1_rdata;
-        endcase
-        unique case (rs2_fwd_sel)
-            FWD_M:   rs2_E_din = m_fwd_data;
-            FWD_W:   rs2_E_din = w_fwd_data;
-            default: rs2_E_din = dinstr.rs2_rdata;
-        endcase
-    end
-
-    always_comb begin : e_brc_fwd_mux_comb
-        if      (rs1_fwd_sel == FWD_M) rs1_brc = m_fwd_data;
-        else if (rs1_fwd_sel == FWD_W) rs1_brc = w_fwd_data;
-        else                            rs1_brc = dinstr.rs1_rdata;
-
-        if      (rs2_fwd_sel == FWD_M) rs2_brc = m_fwd_data;
-        else if (rs2_fwd_sel == FWD_W) rs2_brc = w_fwd_data;
-        else                            rs2_brc = dinstr.rs2_rdata;
-    end
-
     always_comb begin : e_branch_cmp_comb
         unique case (dinstr.op)
             JAL, JALR: e_branch_taken = 1'b1;
-            BEQ:       e_branch_taken = (rs1_brc == rs2_brc);
-            BNE:       e_branch_taken = (rs1_brc != rs2_brc);
-            BLT:       e_branch_taken = ($signed(rs1_brc) <  $signed(rs2_brc));
-            BGE:       e_branch_taken = ($signed(rs1_brc) >= $signed(rs2_brc));
-            BLTU:      e_branch_taken = (rs1_brc <  rs2_brc);
-            BGEU:      e_branch_taken = (rs1_brc >= rs2_brc);
+            BEQ:       e_branch_taken = (rs1_E_din == rs2_E_din);
+            BNE:       e_branch_taken = (rs1_E_din != rs2_E_din);
+            BLT:       e_branch_taken = ($signed(rs1_E_din) <  $signed(rs2_E_din));
+            BGE:       e_branch_taken = ($signed(rs1_E_din) >= $signed(rs2_E_din));
+            BLTU:      e_branch_taken = (rs1_E_din <  rs2_E_din);
+            BGEU:      e_branch_taken = (rs1_E_din >= rs2_E_din);
             default:   e_branch_taken = 1'b0;
         endcase
     end
@@ -317,9 +289,6 @@ module anv32im1_top
         .csr_addr_o(csr_waddr),
         .csr_wdata_o(csr_wdata)
     );
-
-    assign stall_m = stall_m_eff;
-    assign stall_w = stall_w_eff;
 
     anv32_regfile regfile (
         .clk_i(clk_i),

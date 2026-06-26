@@ -7,6 +7,7 @@
     <FileList>
         <File path="../../../rtl/common/mem/anv32_bram_tdp.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/pipe5/anv32_hazard_basic.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/pipe5/anv32_forward_unit.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/anv32i1_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/pipe5/anv32_decode_c1.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/anv32_execute_i_c1.sv" type="file.verilog" enable="1"/>
@@ -27,6 +28,10 @@
         <File path="../../../rtl/include/anv32_isa_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32i1_soc_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32im1_soc_top.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/soc/anv32im2_soc_top.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32_execute_im_c1.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32_execute_im_c2.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32im2_top.sv" type="file.verilog" enable="1"/>
         <File path="src/anv32.cst" type="file.cst" enable="1"/>
         <File path="src/anv32.sdc" type="file.sdc" enable="1"/>
     </FileList>
