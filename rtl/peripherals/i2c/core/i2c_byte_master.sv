@@ -11,7 +11,8 @@ module i2c_byte_master(
 
     output logic busy_o,
     output logic done_o,
-    output logic nack_error_o
+    output logic nack_error_o,
+    output logic arbitration_lost_o
 );
 
     typedef enum logic [2:0]{
@@ -37,11 +38,13 @@ module i2c_byte_master(
     logic [7:0]  data_q;
     logic [2:0]  next_bit_idx;
     logic        nack_error;
+    logic        arbitration_lost;
 
     assign sda_io = sda_drive_low_q ? 1'b0 : 1'bz;
     assign scl_io = scl_drive_low_q ? 1'b0 : 1'bz;
     assign next_bit_idx = (bit_idx_q == 4'd8) ? 3'd7 : (bit_idx_q[2:0] - 3'd1);
     assign nack_error_o = nack_error;
+    assign arbitration_lost_o = arbitration_lost;
     assign busy_o = state_q != ST_IDLE;
 
     always_ff @(posedge clk_i) begin
@@ -53,6 +56,7 @@ module i2c_byte_master(
             bit_idx_q       <= 4'd0;
             data_q          <= 8'd0;
             nack_error      <= 1'b0;
+            arbitration_lost <= 1'b0;
             stop_state_q    <= ST_STOP_SETUP;
             done_o          <= 1'b0;
         end else begin
@@ -64,10 +68,11 @@ module i2c_byte_master(
                         sda_drive_low_q <= 1'b0;
                         phase_q         <= PH_LOW;
                         if(start_i) begin
-                            nack_error <= 1'b0;
-                            state_q    <= start_en_i ? ST_START : ST_SEND;
-                            bit_idx_q  <= 4'd8;
-                            data_q     <= tx_byte_i;
+                            nack_error       <= 1'b0;
+                            arbitration_lost <= 1'b0;
+                            state_q          <= start_en_i ? ST_START : ST_SEND;
+                            bit_idx_q        <= 4'd8;
+                            data_q           <= tx_byte_i;
                         end
                     end
                     ST_START: begin
@@ -83,14 +88,23 @@ module i2c_byte_master(
                             scl_drive_low_q <= 1'b0;
                             phase_q         <= PH_HIGH;
                         end else begin
-                            scl_drive_low_q <= 1'b1;
-                            phase_q         <= PH_LOW;
-                            if(bit_idx_q == 4'd0) begin
-                                sda_drive_low_q <= 1'b0;
-                                state_q         <= ST_ACK;
+                            if(!sda_drive_low_q && (sda_io == 1'b0)) begin
+                                arbitration_lost <= 1'b1;
+                                scl_drive_low_q  <= 1'b0;
+                                sda_drive_low_q  <= 1'b0;
+                                phase_q          <= PH_LOW;
+                                state_q          <= ST_IDLE;
+                                done_o           <= 1'b1;
                             end else begin
-                                bit_idx_q       <= {1'b0, next_bit_idx};
-                                sda_drive_low_q <= ~data_q[next_bit_idx];
+                                scl_drive_low_q <= 1'b1;
+                                phase_q         <= PH_LOW;
+                                if(bit_idx_q == 4'd0) begin
+                                    sda_drive_low_q <= 1'b0;
+                                    state_q         <= ST_ACK;
+                                end else begin
+                                    bit_idx_q       <= {1'b0, next_bit_idx};
+                                    sda_drive_low_q <= ~data_q[next_bit_idx];
+                                end
                             end
                         end
                     end

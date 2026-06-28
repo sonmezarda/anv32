@@ -11,7 +11,8 @@ module i2c_master_write(
 
     output logic       busy_o,
     output logic       done_o,
-    output logic       nack_error_o
+    output logic       nack_error_o,
+    output logic       arbitration_lost_o
 );
 
     typedef enum logic [1:0] {
@@ -29,9 +30,11 @@ module i2c_master_write(
     logic       byte_busy;
     logic       byte_done;
     logic       byte_nack;
+    logic       byte_arbitration_lost;
 
     assign busy_o       = state_q != ST_IDLE;
     assign nack_error_o = byte_nack;
+    assign arbitration_lost_o = byte_arbitration_lost;
 
     i2c_byte_master byte_master (
         .clk_i        (clk_i),
@@ -45,7 +48,8 @@ module i2c_master_write(
         .scl_io       (scl_io),
         .busy_o       (byte_busy),
         .done_o       (byte_done),
-        .nack_error_o (byte_nack)
+        .nack_error_o (byte_nack),
+        .arbitration_lost_o(byte_arbitration_lost)
     );
 
     always_ff @(posedge clk_i) begin
@@ -76,7 +80,7 @@ module i2c_master_write(
                         byte_start <= 1'b0;
                     end
                     if (byte_done) begin
-                        if (byte_nack) begin
+                        if (byte_nack || byte_arbitration_lost) begin
                             done_o  <= 1'b1;
                             state_q <= ST_DONE;
                         end else begin

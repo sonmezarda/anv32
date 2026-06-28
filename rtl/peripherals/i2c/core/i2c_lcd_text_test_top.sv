@@ -39,6 +39,7 @@ module i2c_lcd_text_test_top #(
     logic        i2c_busy;
     logic        i2c_done;
     logic        i2c_nack;
+    logic        i2c_arbitration_lost;
     logic        heartbeat_q;
     logic [23:0] heartbeat_cnt_q;
 
@@ -191,7 +192,7 @@ module i2c_lcd_text_test_top #(
                 ST_WAIT_WRITE: begin
                     write_start_q <= 1'b0;
                     if(i2c_done) begin
-                        if(i2c_nack) begin
+                        if(i2c_nack || i2c_arbitration_lost) begin
                             state_q <= ST_ERROR;
                         end else if(phase_idx_q == op_last_phase(op_idx_q)) begin
                             phase_idx_q <= 2'd0;
@@ -246,7 +247,8 @@ module i2c_lcd_text_test_top #(
         .scl_io(i2c_scl_io),
         .busy_o(i2c_busy),
         .done_o(i2c_done),
-        .nack_error_o(i2c_nack)
+        .nack_error_o(i2c_nack),
+        .arbitration_lost_o(i2c_arbitration_lost)
     );
 
     assign debug_leds[0] = ~i2c_busy;

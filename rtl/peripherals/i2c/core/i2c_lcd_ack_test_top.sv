@@ -23,6 +23,7 @@ module i2c_lcd_ack_test_top #(
     logic                 i2c_busy;
     logic                 i2c_done;
     logic                 i2c_nack;
+    logic                 i2c_arbitration_lost;
     logic                 ack_seen_q;
     logic                 nack_seen_q;
     logic                 heartbeat_q;
@@ -89,12 +90,13 @@ module i2c_lcd_ack_test_top #(
         .scl_io(i2c_scl_io),
         .busy_o(i2c_busy),
         .done_o(i2c_done),
-        .nack_error_o(i2c_nack)
+        .nack_error_o(i2c_nack),
+        .arbitration_lost_o(i2c_arbitration_lost)
     );
 
     assign debug_leds[0] = ~i2c_busy;
     assign debug_leds[1] = ~ack_seen_q;
-    assign debug_leds[2] = ~nack_seen_q;
+    assign debug_leds[2] = ~(nack_seen_q || i2c_arbitration_lost);
     assign debug_leds[3] = ~heartbeat_q;
 
 endmodule
