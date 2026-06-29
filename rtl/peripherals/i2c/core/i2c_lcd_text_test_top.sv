@@ -28,8 +28,6 @@ module i2c_lcd_text_test_top #(
     localparam logic [5:0] OP_COUNT = INIT_OPS + MSG_LEN;
 
     logic        rst_i;
-    logic [31:0] scl_div_cnt_q;
-    logic        scl_tick;
     state_t      state_q;
     logic [31:0] delay_cnt_q;
     logic [5:0]  op_idx_q;
@@ -40,6 +38,7 @@ module i2c_lcd_text_test_top #(
     logic        i2c_done;
     logic        i2c_nack;
     logic        i2c_arbitration_lost;
+    logic        i2c_timeout;
     logic        heartbeat_q;
     logic [23:0] heartbeat_cnt_q;
 
@@ -133,21 +132,6 @@ module i2c_lcd_text_test_top #(
 
     always_ff @(posedge clk_i) begin
         if(rst_i) begin
-            scl_div_cnt_q <= 32'd0;
-            scl_tick      <= 1'b0;
-        end else begin
-            if(scl_div_cnt_q == (SCL_HALF_PERIOD - 1)) begin
-                scl_div_cnt_q <= 32'd0;
-                scl_tick      <= 1'b1;
-            end else begin
-                scl_div_cnt_q <= scl_div_cnt_q + 32'd1;
-                scl_tick      <= 1'b0;
-            end
-        end
-    end
-
-    always_ff @(posedge clk_i) begin
-        if(rst_i) begin
             state_q         <= ST_POWER_WAIT;
             delay_cnt_q     <= POWER_WAIT_CYCLES;
             op_idx_q        <= 6'd0;
@@ -192,7 +176,7 @@ module i2c_lcd_text_test_top #(
                 ST_WAIT_WRITE: begin
                     write_start_q <= 1'b0;
                     if(i2c_done) begin
-                        if(i2c_nack || i2c_arbitration_lost) begin
+                        if(i2c_nack || i2c_arbitration_lost || i2c_timeout) begin
                             state_q <= ST_ERROR;
                         end else if(phase_idx_q == op_last_phase(op_idx_q)) begin
                             phase_idx_q <= 2'd0;
@@ -235,11 +219,14 @@ module i2c_lcd_text_test_top #(
         end
     end
 
-    i2c_master_write u_i2c_master_write(
+    i2c_master_write_timed #(
+        .SCL_LOW_CYCLES(SCL_HALF_PERIOD),
+        .SCL_HIGH_CYCLES(SCL_HALF_PERIOD),
+        .STRETCH_TIMEOUT_CYCLES(CLK_FREQ / 100)
+    ) u_i2c_master_write(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .start_i(write_start_q),
-        .scl_tick_i(scl_tick),
         .slave_addr_i(LCD_ADDR),
         .read_write_sel_i(1'b0),
         .tx_data_i(write_data_q),
@@ -248,7 +235,8 @@ module i2c_lcd_text_test_top #(
         .busy_o(i2c_busy),
         .done_o(i2c_done),
         .nack_error_o(i2c_nack),
-        .arbitration_lost_o(i2c_arbitration_lost)
+        .arbitration_lost_o(i2c_arbitration_lost),
+        .timeout_error_o(i2c_timeout)
     );
 
     assign debug_leds[0] = ~i2c_busy;

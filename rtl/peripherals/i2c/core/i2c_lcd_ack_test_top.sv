@@ -16,14 +16,15 @@ module i2c_lcd_ack_test_top #(
 );
 
     logic                 rst_i;
-    logic [31:0]          scl_div_cnt_q;
-    logic                 scl_tick;
     logic [31:0]          retry_cnt_q;
     logic                 start_req_q;
     logic                 i2c_busy;
     logic                 i2c_done;
+    logic [7:0]           i2c_rx_byte;
+    logic                 i2c_rx_valid;
     logic                 i2c_nack;
     logic                 i2c_arbitration_lost;
+    logic                 i2c_timeout;
     logic                 ack_seen_q;
     logic                 nack_seen_q;
     logic                 heartbeat_q;
@@ -32,21 +33,6 @@ module i2c_lcd_ack_test_top #(
     assign rst_i = ~rst_n_i;
 
     assign uart_tx_o = 1'b1;
-
-    always_ff @(posedge clk_i) begin
-        if(rst_i) begin
-            scl_div_cnt_q <= '0;
-            scl_tick      <= 1'b0;
-        end else begin
-            if(scl_div_cnt_q == (SCL_HALF_PERIOD - 1)) begin
-                scl_div_cnt_q <= '0;
-                scl_tick      <= 1'b1;
-            end else begin
-                scl_div_cnt_q <= scl_div_cnt_q + 32'd1;
-                scl_tick      <= 1'b0;
-            end
-        end
-    end
 
     always_ff @(posedge clk_i) begin
         if(rst_i) begin
@@ -65,8 +51,8 @@ module i2c_lcd_ack_test_top #(
             if(i2c_busy) begin
                 start_req_q <= 1'b0;
             end else if(i2c_done) begin
-                ack_seen_q  <= ~i2c_nack;
-                nack_seen_q <= i2c_nack;
+                ack_seen_q  <= ~(i2c_nack || i2c_arbitration_lost || i2c_timeout);
+                nack_seen_q <= i2c_nack || i2c_arbitration_lost || i2c_timeout;
                 retry_cnt_q <= RETRY_CYCLES;
             end else begin
                 if(retry_cnt_q == 32'd0) begin
@@ -78,25 +64,33 @@ module i2c_lcd_ack_test_top #(
         end
     end
 
-    i2c_byte_master u_i2c_byte_master(
+    i2c_byte_master_timed #(
+        .SCL_LOW_CYCLES(SCL_HALF_PERIOD),
+        .SCL_HIGH_CYCLES(SCL_HALF_PERIOD),
+        .STRETCH_TIMEOUT_CYCLES(CLK_FREQ / 100)
+    ) u_i2c_byte_master(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .start_i(start_req_q),
-        .scl_tick_i(scl_tick),
         .start_en_i(1'b1),
         .stop_en_i(1'b1),
+        .read_i(1'b0),
+        .rx_ack_i(1'b0),
         .tx_byte_i({LCD_ADDR, 1'b0}),
         .sda_io(i2c_sda_io),
         .scl_io(i2c_scl_io),
         .busy_o(i2c_busy),
         .done_o(i2c_done),
+        .rx_byte_o(i2c_rx_byte),
+        .rx_valid_o(i2c_rx_valid),
         .nack_error_o(i2c_nack),
-        .arbitration_lost_o(i2c_arbitration_lost)
+        .arbitration_lost_o(i2c_arbitration_lost),
+        .timeout_error_o(i2c_timeout)
     );
 
     assign debug_leds[0] = ~i2c_busy;
     assign debug_leds[1] = ~ack_seen_q;
-    assign debug_leds[2] = ~(nack_seen_q || i2c_arbitration_lost);
+    assign debug_leds[2] = ~nack_seen_q;
     assign debug_leds[3] = ~heartbeat_q;
 
 endmodule

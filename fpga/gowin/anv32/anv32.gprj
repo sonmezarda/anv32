@@ -37,8 +37,10 @@
         <File path="../../../rtl/peripherals/uart/core/uart_rx.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/uart/core/uart_tx.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/uart/core/uart_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/i2c/core/i2c_byte_master.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/i2c/core/i2c_master_write.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/i2c/core/i2c_byte_master_timed.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/i2c/core/i2c_master_write_timed.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/i2c/core/i2c_master_read_timed.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/i2c/core/i2c_master_reg_read_timed.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/core/i2c_lcd_ack_test_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/core/i2c_lcd_text_test_top.sv" type="file.verilog" enable="1"/>
         

@@ -1,8 +1,11 @@
-module i2c_master_write(
+module i2c_master_write_timed #(
+    parameter int SCL_LOW_CYCLES         = 135,
+    parameter int SCL_HIGH_CYCLES        = 135,
+    parameter int STRETCH_TIMEOUT_CYCLES = 27_000
+)(
     input  logic       clk_i,
     input  logic       rst_i,
     input  logic       start_i,
-    input  logic       scl_tick_i,
     input  logic [6:0] slave_addr_i,
     input  logic       read_write_sel_i,
     input  logic [7:0] tx_data_i,
@@ -12,7 +15,8 @@ module i2c_master_write(
     output logic       busy_o,
     output logic       done_o,
     output logic       nack_error_o,
-    output logic       arbitration_lost_o
+    output logic       arbitration_lost_o,
+    output logic       timeout_error_o
 );
 
     typedef enum logic [1:0] {
@@ -31,29 +35,39 @@ module i2c_master_write(
     logic       byte_done;
     logic       byte_nack;
     logic       byte_arbitration_lost;
+    logic       byte_timeout;
 
-    assign busy_o       = state_q != ST_IDLE;
-    assign nack_error_o = byte_nack;
-    assign arbitration_lost_o = byte_arbitration_lost;
+    assign busy_o              = state_q != ST_IDLE;
+    assign nack_error_o        = byte_nack;
+    assign arbitration_lost_o  = byte_arbitration_lost;
+    assign timeout_error_o     = byte_timeout;
 
-    i2c_byte_master byte_master (
-        .clk_i        (clk_i),
-        .rst_i        (rst_i),
-        .start_i      (byte_start),
-        .scl_tick_i   (scl_tick_i),
-        .start_en_i   (byte_start_en),
-        .stop_en_i    (byte_stop_en),
-        .tx_byte_i    (byte_tx),
-        .sda_io       (sda_io),
-        .scl_io       (scl_io),
-        .busy_o       (byte_busy),
-        .done_o       (byte_done),
-        .nack_error_o (byte_nack),
-        .arbitration_lost_o(byte_arbitration_lost)
+    i2c_byte_master_timed #(
+        .SCL_LOW_CYCLES(SCL_LOW_CYCLES),
+        .SCL_HIGH_CYCLES(SCL_HIGH_CYCLES),
+        .STRETCH_TIMEOUT_CYCLES(STRETCH_TIMEOUT_CYCLES)
+    ) byte_master (
+        .clk_i(clk_i),
+        .rst_i(rst_i),
+        .start_i(byte_start),
+        .start_en_i(byte_start_en),
+        .stop_en_i(byte_stop_en),
+        .read_i(1'b0),
+        .rx_ack_i(1'b0),
+        .tx_byte_i(byte_tx),
+        .sda_io(sda_io),
+        .scl_io(scl_io),
+        .busy_o(byte_busy),
+        .done_o(byte_done),
+        .rx_byte_o(),
+        .rx_valid_o(),
+        .nack_error_o(byte_nack),
+        .arbitration_lost_o(byte_arbitration_lost),
+        .timeout_error_o(byte_timeout)
     );
 
     always_ff @(posedge clk_i) begin
-        if (rst_i) begin
+        if(rst_i) begin
             state_q       <= ST_IDLE;
             byte_start    <= 1'b0;
             byte_start_en <= 1'b0;
@@ -63,10 +77,10 @@ module i2c_master_write(
         end else begin
             done_o <= 1'b0;
 
-            case (state_q)
+            case(state_q)
                 ST_IDLE: begin
                     byte_start <= 1'b0;
-                    if (start_i) begin
+                    if(start_i) begin
                         byte_tx       <= {slave_addr_i, read_write_sel_i};
                         byte_start_en <= 1'b1;
                         byte_stop_en  <= 1'b0;
@@ -76,11 +90,12 @@ module i2c_master_write(
                 end
 
                 ST_ADDR_WAIT: begin
-                    if (byte_busy) begin
+                    if(byte_busy) begin
                         byte_start <= 1'b0;
                     end
-                    if (byte_done) begin
-                        if (byte_nack || byte_arbitration_lost) begin
+
+                    if(byte_done) begin
+                        if(byte_nack || byte_arbitration_lost || byte_timeout) begin
                             done_o  <= 1'b1;
                             state_q <= ST_DONE;
                         end else begin
@@ -94,10 +109,11 @@ module i2c_master_write(
                 end
 
                 ST_DATA_WAIT: begin
-                    if (byte_busy) begin
+                    if(byte_busy) begin
                         byte_start <= 1'b0;
                     end
-                    if (byte_done) begin
+
+                    if(byte_done) begin
                         done_o  <= 1'b1;
                         state_q <= ST_DONE;
                     end
@@ -105,12 +121,12 @@ module i2c_master_write(
 
                 ST_DONE: begin
                     byte_start <= 1'b0;
-                    state_q <= ST_IDLE;
+                    state_q    <= ST_IDLE;
                 end
 
                 default: begin
                     byte_start <= 1'b0;
-                    state_q <= ST_IDLE;
+                    state_q    <= ST_IDLE;
                 end
             endcase
         end
