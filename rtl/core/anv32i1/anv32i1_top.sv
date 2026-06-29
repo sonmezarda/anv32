@@ -292,6 +292,7 @@ module anv32i1_top
         .stall_i(stall_m_eff),
         .einstr_i(einstr),
         .mem_rdata_i(mem_rdata_i),
+        .mem_valid_o(),
         .mem_addr_o(m_stage_dmem_addr_out),   //
         .mem_wdata_o(dmem_wdata),
         .mem_we_o(dmem_we),

@@ -29,6 +29,8 @@ module anv32im2_soc_top(
     logic [31:0] mem_addr;
     logic [31:0] mem_wdata;
     logic [31:0] mem_rdata;
+    logic        mem_valid;
+    logic        mem_ready;
     logic [3:0]  mem_we;
 
     logic [BRAM_ADDR_W-1:0] imem_addr;
@@ -83,24 +85,25 @@ module anv32im2_soc_top(
     assign debug_leds = ~led_reg[3:0];
     assign imem_addr = instr_addr[BRAM_ADDR_W+1:2];
     assign dmem_addr = mem_addr[BRAM_ADDR_W+1:2];
-    assign led_sel = (mem_addr == LED_ADDR);
-    assign gpio_irq_pending_sel = (mem_addr == GPIO_IRQ_PENDING_ADDR);
-    assign uart_txdata_sel = (mem_addr == UART_TXDATA_ADDR);
-    assign uart_status_sel = (mem_addr == UART_STATUS_ADDR);
-    assign uart_baud_sel   = (mem_addr == UART_BAUD_ADDR);
-    assign uart_error_sel  = (mem_addr == UART_ERROR_ADDR);
-    assign i2c_sel = (mem_addr[31:5] == I2C_BASE_ADDR[31:5]);
+    assign led_sel = mem_valid && (mem_addr == LED_ADDR);
+    assign gpio_irq_pending_sel = mem_valid && (mem_addr == GPIO_IRQ_PENDING_ADDR);
+    assign uart_txdata_sel = mem_valid && (mem_addr == UART_TXDATA_ADDR);
+    assign uart_status_sel = mem_valid && (mem_addr == UART_STATUS_ADDR);
+    assign uart_baud_sel   = mem_valid && (mem_addr == UART_BAUD_ADDR);
+    assign uart_error_sel  = mem_valid && (mem_addr == UART_ERROR_ADDR);
+    assign i2c_sel = mem_valid && (mem_addr[31:5] == I2C_BASE_ADDR[31:5]);
     assign mmio_sel = led_sel || gpio_irq_pending_sel || uart_txdata_sel ||
                       uart_status_sel || uart_baud_sel || uart_error_sel ||
                       i2c_sel;
-    assign led_write = led_sel && (mem_we != 4'b0);
-    assign gpio_irq_pending_clear = gpio_irq_pending_sel && (mem_we != 4'b0) && mem_wdata[0];
-    assign uart_tx_write    = uart_txdata_sel && (mem_we != 4'b0);
-    assign uart_baud_write  = uart_baud_sel && (mem_we != 4'b0);
-    assign uart_error_clear = uart_error_sel && (mem_we != 4'b0) && mem_wdata[0];
-    assign i2c_write = i2c_sel && (mem_we != 4'b0);
-    assign i2c_read  = i2c_sel && (mem_we == 4'b0);
-    assign dmem_we = mmio_sel ? 4'b0 : mem_we;
+    assign led_write = led_sel && mem_ready && (mem_we != 4'b0);
+    assign gpio_irq_pending_clear = gpio_irq_pending_sel && mem_ready && (mem_we != 4'b0) && mem_wdata[0];
+    assign uart_tx_write    = uart_txdata_sel && mem_ready && (mem_we != 4'b0);
+    assign uart_baud_write  = uart_baud_sel && mem_ready && (mem_we != 4'b0);
+    assign uart_error_clear = uart_error_sel && mem_ready && (mem_we != 4'b0) && mem_wdata[0];
+    assign i2c_write = i2c_sel && mem_ready && (mem_we != 4'b0);
+    assign i2c_read  = i2c_sel && mem_ready && (mem_we == 4'b0);
+    assign mem_ready = 1'b1;
+    assign dmem_we = (mem_valid && !mmio_sel && mem_ready) ? mem_we : 4'b0;
     assign mmio_rdata = led_sel ? led_reg :
                         gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
                         uart_status_sel ? {24'b0,
@@ -217,8 +220,10 @@ module anv32im2_soc_top(
         .instr_i(instr_rdata),
         .instr_addr_o(instr_addr),
         .mem_rdata_i(mem_rdata),
+        .mem_ready_i(mem_ready),
         .mem_wdata_o(mem_wdata),
         .mem_addr_o(mem_addr),
+        .mem_valid_o(mem_valid),
         .mem_we(mem_we),
         .ext_irq_i(gpio_irq_pending)
     );

@@ -15,8 +15,10 @@ module anv32im2_top
     output logic [XLEN-1:0] instr_addr_o,
 
     input  logic [XLEN-1:0] mem_rdata_i,
+    input  logic            mem_ready_i,
     output logic [XLEN-1:0] mem_wdata_o,
     output logic [XLEN-1:0] mem_addr_o,
+    output logic            mem_valid_o,
     output logic [3:0]      mem_we
 );
 
@@ -25,6 +27,8 @@ module anv32im2_top
 
     logic [XLEN-1:0]        dmem_wdata;
     logic [3:0]             dmem_we;
+    logic                   dmem_valid;
+    logic                   mem_wait_stall;
 
     logic                   stall_f, stall_d, stall_e;
 
@@ -77,6 +81,7 @@ module anv32im2_top
    
     assign mem_wdata_o  = dmem_wdata;
     assign mem_addr_o   = m_stage_dmem_addr_out;
+    assign mem_valid_o  = dmem_valid;
     assign mem_we       = dmem_we;
     assign instr_addr_o = fetch_addr;
 
@@ -145,7 +150,7 @@ module anv32im2_top
         end
     end
 
-    assign irq_req = irq_pending && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i;
+    assign irq_req = irq_pending && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i && !mem_wait_stall;
 
     always_comb begin : csr_trap_mux_comb
         csr_trap       = trap_req || irq_req;
@@ -175,17 +180,18 @@ module anv32im2_top
 
     // --- stall routing: multi-cycle E stalls upstream while M/W drain ---
     assign md_stall    = e_mul_div_stall;            // HAS_M=0 -> execute tie-off 0
+    assign mem_wait_stall = dmem_valid && !mem_ready_i;
 
     assign stall_e     = md_stall;
     assign stall_im2_raw = dinstr_decode.valid &&
         (im2_raw_src_hazard(dinstr_decode.rs1_valid, dinstr_decode.rs1_idx) ||
          im2_raw_src_hazard(dinstr_decode.rs2_valid, dinstr_decode.rs2_idx));
 
-    assign stall_f_eff = stall_i || stall_f || stall_im2_raw || md_stall;
-    assign stall_d_eff = stall_i || stall_d || stall_im2_raw || md_stall;
-    assign stall_e_eff = stall_i || stall_e;
-    assign stall_m_eff = stall_i;
-    assign stall_w_eff = stall_i;
+    assign stall_f_eff = stall_i || stall_f || stall_im2_raw || md_stall || mem_wait_stall;
+    assign stall_d_eff = stall_i || stall_d || stall_im2_raw || md_stall || mem_wait_stall;
+    assign stall_e_eff = stall_i || stall_e || mem_wait_stall;
+    assign stall_m_eff = stall_i || mem_wait_stall;
+    assign stall_w_eff = stall_i || mem_wait_stall;
 
     anv32_hazard_basic hazard_unit(
         .clk_i(clk_i),
@@ -306,6 +312,7 @@ module anv32im2_top
         .stall_i(stall_m_eff),
         .einstr_i(einstr),
         .mem_rdata_i(mem_rdata_i),
+        .mem_valid_o(dmem_valid),
         .mem_addr_o(m_stage_dmem_addr_out),
         .mem_wdata_o(dmem_wdata),
         .mem_we_o(dmem_we),

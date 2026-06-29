@@ -23,6 +23,7 @@ module anv32_memory_c1_tb
     logic [XLEN-1:0] mem_rdata;
     logic [XLEN-1:0] mem_addr;
     logic [XLEN-1:0] mem_wdata;
+    logic            mem_valid;
     logic [3:0]      mem_we;
     logic [XLEN-1:0] mem_rdata_o;
     minstr_t         minstr;
@@ -39,6 +40,7 @@ module anv32_memory_c1_tb
         .stall_i     (stall),
         .einstr_i    (einstr),
         .mem_rdata_i (mem_rdata),
+        .mem_valid_o (mem_valid),
         .mem_addr_o  (mem_addr),
         .mem_wdata_o (mem_wdata),
         .mem_we_o    (mem_we),
@@ -158,6 +160,7 @@ module anv32_memory_c1_tb
         e = mk_einstr(1'b1, op, 1'b1, addr, wdata, 32'h0000_0104,
                       5'd0, 1'b0, WB_ALU);
         drive(nm, e, 32'hCAFE_BABE, 1'b0);
+        chk1 ("valid", mem_valid, 1'b1);
         chk32("addr",  mem_addr,   addr);
         chk4 ("we",    mem_we,     exp_we);
         chk32("wdata", mem_wdata,  exp_wdata);
@@ -177,6 +180,7 @@ module anv32_memory_c1_tb
         e = mk_einstr(1'b1, op, 1'b1, addr, 32'h0, 32'h0000_0204,
                       5'd11, 1'b1, WB_MEM);
         drive(nm, e, raw_rdata, 1'b0);
+        chk1 ("valid", mem_valid, 1'b1);
         chk32("addr",  mem_addr,    addr);
         chk4 ("we",    mem_we,      4'b0000);
         capture();
@@ -203,6 +207,7 @@ module anv32_memory_c1_tb
             e = mk_einstr(1'b1, ADD, 1'b0, 32'h1234_5678, 32'h0,
                           32'h8000_0004, 5'd5, 1'b1, WB_ALU);
             drive("ALU", e, 32'h1111_2222, 1'b0);
+            chk1 ("valid", mem_valid, 1'b0);
             chk32("addr",  mem_addr,   32'h1234_5678);
             chk4 ("we",    mem_we,     4'b0000);
             chk32("wdata", mem_wdata,  32'h0);

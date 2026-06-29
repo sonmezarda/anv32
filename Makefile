@@ -51,6 +51,10 @@ SPIKE_INSNS ?= 200
 KEEP       ?=
 CYCLES     ?= 80
 ASM_LINES  ?= 120
+MEM_READY_ASM ?= sw/examples/load_timing.S
+MEM_READY_NAME ?= $(basename $(notdir $(MEM_READY_ASM)))
+MEM_READY_KEEP_DIR ?= build/mem-ready/$(MEM_READY_NAME)
+MEM_READY_WAIT ?= 3
 TRACE      ?= 0
 DETAIL     ?= 0
 PIPELINE_LOG ?=
@@ -207,6 +211,30 @@ SRC_cpu_trace := \
 	$(ANV32IM1_TOP_SRC) \
 	sim/tb/anv32im/tb_cpu_trace.sv
 
+ANV32IM2_TOP_SRC := \
+	$(COMMON_PKGS) \
+	rtl/common/mem/anv32_bram_tdp.sv \
+	rtl/core/common/anv32_regfile.sv \
+	rtl/core/common/anv32_alu.sv \
+	rtl/core/common/anv32_decoder.sv \
+	rtl/core/common/anv32_csr.sv \
+	rtl/core/common/anv32_csr_exec.sv \
+	rtl/core/common/anv32_mul_comb.sv \
+	rtl/core/common/anv32_div.sv \
+	rtl/core/pipe5/anv32_hazard_basic.sv \
+	rtl/core/pipe5/anv32_forward_unit.sv \
+	rtl/core/pipe5/anv32_fetch_c1.sv \
+	rtl/core/pipe5/anv32_decode_c1.sv \
+	rtl/core/anv32im2/anv32_execute_im_c1.sv \
+	rtl/core/anv32im2/anv32_execute_im_c2.sv \
+	rtl/core/pipe5/anv32_memory_c1.sv \
+	rtl/core/pipe5/anv32_writeback_c1.sv \
+	rtl/core/anv32im2/anv32im2_top.sv
+
+SRC_mem_ready_trace := \
+	$(ANV32IM2_TOP_SRC) \
+	sim/tb/anv32im/tb_mem_ready_stall.sv
+
 VERILATOR_WARNINGS_QUIET := \
 	-Wno-DECLFILENAME \
 	-Wno-EOFNEWLINE \
@@ -233,7 +261,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -457,6 +485,40 @@ cpu-run:
 	if [ "$(TRACE)" = "1" ]; then \
 		echo "Waveform: $(OBJ_DIR)/cpu_trace.vcd"; \
 	fi
+
+mem-ready-trace:
+	@set -euo pipefail; \
+	src="$(MEM_READY_ASM)"; \
+	name="$(MEM_READY_NAME)"; \
+	work_dir="$(MEM_READY_KEEP_DIR)"; \
+	mkdir -p "$$work_dir"; \
+	echo "MEM ready trace build: $$src -> $$work_dir"; \
+	$(PYTHON) $(BUILD_RV32_ASM) \
+		--src "$$src" \
+		--out-dir "$$work_dir" \
+		--name "$$name" \
+		--cc "$(SW_CC)" \
+		--march "$(SW_ARCH)" \
+		--mabi "$(SW_ABI)" \
+		--objcopy "$(SW_OBJCOPY)" \
+		--objdump "$(SW_OBJDUMP)" \
+		--linker "$(LINKER)" \
+		--bin-to-hex "$(BIN_TO_HEX)" \
+		--split-hex "$(HEX_SPLIT)" \
+		--python "$(PYTHON)"; \
+	echo; \
+	echo "---- linked disassembly (first $(ASM_LINES) lines) ----"; \
+	sed -n '1,$(ASM_LINES)p' "$$work_dir/$$name.dump"; \
+	echo "---- mem ready stall trace ($(CYCLES) cycles max, wait=$(MEM_READY_WAIT)) ----"; \
+	$(VERILATOR) $(VERILATOR_FLAGS) \
+		--top-module tb_mem_ready_stall \
+		-GINIT_FILE=\"$$work_dir/$$name\" \
+		-GMAX_CYCLES=$(CYCLES) \
+		-GWAIT_CYCLES=$(MEM_READY_WAIT) \
+		-GPC_RESET_VALUE=$(PC_RESET_VALUE) \
+		$(SRC_mem_ready_trace); \
+	$(OBJ_DIR)/Vtb_mem_ready_stall
+
 asm-golden-run:
 	@set -euo pipefail; \
 	src="$(GOLDEN_ASM_SRC)"; \

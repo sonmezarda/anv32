@@ -8,6 +8,7 @@ module anv32_memory_c1
     input  einstr_t         einstr_i,
     input  logic [XLEN-1:0] mem_rdata_i, 
 
+    output logic            mem_valid_o,
     output logic [XLEN-1:0] mem_addr_o,
     output logic [XLEN-1:0] mem_wdata_o,
     output logic [3:0]      mem_we_o,
@@ -20,6 +21,7 @@ module anv32_memory_c1
     logic [15:0]     load_half;
     minstr_t         minstr;
 
+    assign mem_valid_o = einstr_i.valid && einstr_i.is_mem;
     assign mem_addr_o = einstr_i.alu_result;
     assign minstr_o = minstr;
     assign mem_rdata_o = stall_i ? load_data_hold : load_data;
