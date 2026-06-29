@@ -26,30 +26,28 @@ Bu işler gerekirse `anv32i2` veya ayrı bir debug/peripheral çalışmasının 
 
 ## I2C Peripheral Notları
 
-Tarih: 2026-06-28
+Tarih: 2026-06-28, güncelleme: 2026-06-29
 
-I2C çekirdeği şu an temel master transmit tarafını çalıştırıyor. Tang Nano 9K üzerinde 2x16 I2C LCD backpack ile ACK alındı ve `ANV32 I2C OK` yazısı başarıyla gösterildi. Bu aşama I2C bit sürme, open-drain kullanım, START/STOP, ACK okuma ve basit write transaction için iyi bir doğrulama oldu.
+I2C çekirdeği önce temel master transmit tarafıyla başladı. Tang Nano 9K üzerinde 2x16 I2C LCD backpack ile ACK alındı ve `ANV32 I2C OK` yazısı başarıyla gösterildi. Sonra timed byte engine, clock stretching bekleme, read byte, repeated START ve QMC5883L manyetometre register read/write akışları eklendi. QMC5883L üzerinden gerçek XYZ verisi okunarak write/read tarafı donanımda doğrulandı.
 
 Mevcut durumda olanlar:
 
-- `i2c_byte_master`: START, byte transmit, ACK okuma ve STOP üretiyor.
-- `i2c_master_write`: address + data write transaction yapıyor.
-- LCD ACK/text FPGA test top'ları var.
-- Temel transmit arbitration-lost algılama eklendi: master SDA'yı release edip `1` göndermek isterken hatta `0` okursa işlem kesiliyor.
+- `i2c_byte_master_timed`: START, repeated START, byte transmit, ACK okuma, byte receive, master ACK/NACK ve STOP üretiyor.
+- SCL release edildikten sonra gerçek `scl_i` high olana kadar bekleyerek clock stretching destekliyor.
+- Stretch timeout ve transmit arbitration-lost algılama var.
+- `i2c_cmd_master_timed`: byte engine üstünde command queue, RX FIFO, bus busy/free check, bus recovery ve sticky error bitleri sağlıyor.
+- `i2c_periph`: SoC tarafına `CMD`, `STATUS`, `RXDATA`, `CTRL` register map'iyle bağlanıyor.
+- Eski senaryo helper modülleri (`write`, `read`, `reg_read`, LCD/probe test top'ları) ayıklandı; bu akışlar artık yazılımdan command queue'ya komut dizerek yapılacak.
+- `sw/fpga/i2c_qmc5883l.c`: command queue tabanlı QMC5883L smoke test programı.
 
 Profesyonel MCU seviyesine yaklaşmak için kalan işler:
 
-- Clock stretching desteği: SCL release edildikten sonra gerçekten high olana kadar beklemek.
-- RX byte desteği: master read sırasında SDA okuma, son byte için NACK üretme.
-- Repeated START desteği: register read akışları için `START + addr W + reg + repeated START + addr R`.
-- Timeout altyapısı: clock stretching veya stuck bus durumunda sonsuz beklememek.
-- Bus busy algılama: işlem başlatmadan önce SDA/SCL durumunu kontrol etmek.
-- Stuck bus recovery: SDA low kalırsa SCL'ye 9 pulse gönderip STOP denemek.
-- Transaction controller: byte engine üstünde multi-byte write/read/register-read/register-write akışları.
-- FIFO veya command queue: CPU'nun her byte için beklememesi için TX/RX FIFO ya da komut kuyruğu.
-- MMIO wrapper: `CTRL`, `STATUS`, `BAUD_DIV`, `TXDATA`, `RXDATA`, `IRQ_STAT`, `IRQ_EN`, `TIMEOUT` gibi register map.
-- Interrupt desteği: done, RX ready, TX empty, NACK, arbitration lost, timeout ve bus error için IRQ.
-- Hata/status temizleme modeli: write-1-to-clear status bitleri.
-- Test kapsamı: byte engine waveform testleri, NACK, arbitration lost, clock stretching, repeated START ve LCD/sensör smoke testleri.
+- Daha esnek timing register'ları: `SCL_LOW`, `SCL_HIGH`, `STRETCH_TIMEOUT` değerlerini MMIO'dan ayarlanabilir yapmak.
+- Error sonrası politika: NACK/arbitration/timeout durumunda command queue'yu otomatik durdurma veya yazılım kontrollü devam etme seçeneği.
+- Interrupt modeli: RX ready, command done, command empty, error ve recovery done için ayrı IRQ status/enable bitleri.
+- Command queue seviye sayaçları: TX command FIFO level ve RX FIFO level bilgisini status register'a eklemek.
+- Bus recovery geliştirme: recovery sonunda SDA/SCL hâlâ serbest değilse daha net stuck-low sebebi raporlamak.
+- Test kapsamı: command queue overflow, RX overflow, NACK, arbitration lost, clock stretching, recovery ve repeated START için simülasyon testleri.
+- Bus wrapper standardizasyonu: UART/I2C/GPIO/TIMER için ortak peripheral bus protokolüne taşımak.
 
-Önerilen sıradaki teknik adım: önce clock stretching'i ekle. Bunun için SCL'yi bıraktıktan sonra `scl_io` gerçekten `1` olana kadar high faza geçme. Bu değişiklik I2C engine'i gerçek cihazlarla daha uyumlu hale getirir ve timeout tasarımının da temelini oluşturur.
+Önerilen sıradaki teknik adım: I2C register map'i biraz daha MCU benzeri hale getirip timing ve IRQ ayarlarını MMIO'ya taşımak. Ardından ortak peripheral bus tasarımına geçerken bu register modelini UART ile aynı disipline sokmak.

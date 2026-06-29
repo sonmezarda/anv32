@@ -11,11 +11,13 @@ module i2c_byte_master_timed #(
     input  logic       read_i,
     input  logic       rx_ack_i,
     input  logic [7:0] tx_byte_i,
-    inout  logic       sda_io,
-    inout  logic       scl_io,
+    input  logic       sda_i,
+    input  logic       scl_i,
 
     output logic       busy_o,
     output logic       done_o,
+    output logic       sda_drive_low_o,
+    output logic       scl_drive_low_o,
     output logic [7:0] rx_byte_o,
     output logic       rx_valid_o,
     output logic       nack_error_o,
@@ -57,9 +59,8 @@ module i2c_byte_master_timed #(
     logic [31:0] phase_cnt_q;
     logic [31:0] stretch_cnt_q;
 
-    assign sda_io = sda_drive_low_q ? 1'b0 : 1'bz;
-    assign scl_io = scl_drive_low_q ? 1'b0 : 1'bz;
-
+    assign sda_drive_low_o = sda_drive_low_q;
+    assign scl_drive_low_o = scl_drive_low_q;
     assign busy_o = state_q != ST_IDLE;
 
     always_ff @(posedge clk_i) begin
@@ -132,7 +133,7 @@ module i2c_byte_master_timed #(
                             scl_drive_low_q <= 1'b0;
                             sda_drive_low_q <= 1'b0;
 
-                            if(scl_io == 1'b1) begin
+                            if(scl_i == 1'b1) begin
                                 sda_drive_low_q <= 1'b1;
                                 phase_cnt_q     <= 32'd0;
                                 stretch_cnt_q   <= 32'd0;
@@ -184,7 +185,7 @@ module i2c_byte_master_timed #(
                         PH_WAIT_HIGH: begin
                             scl_drive_low_q <= 1'b0; // release scl
 
-                            if(scl_io == 1'b1) begin // if scl_io realy released
+                            if(scl_i == 1'b1) begin // if scl_io realy released
                                 phase_cnt_q   <= 32'd0;
                                 stretch_cnt_q <= 32'd0;
                                 phase_q       <= PH_HIGH; 
@@ -201,7 +202,7 @@ module i2c_byte_master_timed #(
                         PH_HIGH: begin
                             scl_drive_low_q <= 1'b0;
 
-                            if(!sda_drive_low_q && (sda_io == 1'b0)) begin // SDA released but its still low
+                            if(!sda_drive_low_q && (sda_i == 1'b0)) begin // SDA released but its still low
                                 arbitration_lost_o <= 1'b1;
                                 sda_drive_low_q    <= 1'b0;
                                 state_q            <= ST_IDLE;
@@ -247,8 +248,8 @@ module i2c_byte_master_timed #(
                             scl_drive_low_q <= 1'b0;
                             sda_drive_low_q <= 1'b0;
 
-                            if(scl_io == 1'b1) begin
-                                nack_error_o <= (sda_io != 1'b0);
+                            if(scl_i == 1'b1) begin
+                                nack_error_o <= (sda_i != 1'b0);
                                 phase_cnt_q  <= 32'd0;
                                 stretch_cnt_q <= 32'd0;
                                 phase_q      <= PH_HIGH;
@@ -308,7 +309,7 @@ module i2c_byte_master_timed #(
                             scl_drive_low_q <= 1'b0;
                             sda_drive_low_q <= 1'b0;
 
-                            if(scl_io == 1'b1) begin
+                            if(scl_i == 1'b1) begin
                                 phase_cnt_q    <= 32'd0;
                                 stretch_cnt_q  <= 32'd0;
                                 rx_sampled_q   <= 1'b0;
@@ -327,7 +328,7 @@ module i2c_byte_master_timed #(
                             sda_drive_low_q <= 1'b0;
 
                             if(!rx_sampled_q && (phase_cnt_q >= SCL_HIGH_SAMPLE)) begin
-                                rx_byte_o[bit_idx_q] <= sda_io;
+                                rx_byte_o[bit_idx_q] <= sda_i;
                                 rx_sampled_q         <= 1'b1;
                             end
 
@@ -371,7 +372,7 @@ module i2c_byte_master_timed #(
                             scl_drive_low_q <= 1'b0;
                             sda_drive_low_q <= rx_ack_q;
 
-                            if(scl_io == 1'b1) begin
+                            if(scl_i == 1'b1) begin
                                 phase_cnt_q   <= 32'd0;
                                 stretch_cnt_q <= 32'd0;
                                 phase_q       <= PH_HIGH;
@@ -433,7 +434,7 @@ module i2c_byte_master_timed #(
                             scl_drive_low_q <= 1'b0;
                             sda_drive_low_q <= 1'b1;
 
-                            if(scl_io == 1'b1) begin
+                            if(scl_i == 1'b1) begin
                                 phase_cnt_q   <= 32'd0;
                                 stretch_cnt_q <= 32'd0;
                                 phase_q       <= PH_HIGH;

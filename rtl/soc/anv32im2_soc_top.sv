@@ -3,6 +3,8 @@ module anv32im2_soc_top(
     input  logic rst_n_i,
     input  logic gpio_irq_i,
     input  logic uart_rx_i,
+    inout  logic i2c_sda_io,
+    inout  logic i2c_scl_io,
     output logic uart_tx_o,
     output logic [3:0] debug_leds
 );
@@ -14,6 +16,7 @@ module anv32im2_soc_top(
     localparam logic [31:0] UART_STATUS_ADDR      = 32'h1000_1004;
     localparam logic [31:0] UART_BAUD_ADDR        = 32'h1000_1008;
     localparam logic [31:0] UART_ERROR_ADDR       = 32'h1000_100C;
+    localparam logic [31:0] I2C_BASE_ADDR         = 32'h1000_2000;
 
     logic rst_i;
     logic [POR_CYCLES-1:0] por_shift = '0;
@@ -41,9 +44,12 @@ module anv32im2_soc_top(
     logic                   uart_status_sel;
     logic                   uart_baud_sel;
     logic                   uart_error_sel;
+    logic                   i2c_sel;
     logic                   uart_tx_write;
     logic                   uart_baud_write;
     logic                   uart_error_clear;
+    logic                   i2c_write;
+    logic                   i2c_read;
     logic                   mmio_sel;
     logic                   mmio_sel_q;
     logic [31:0]            mmio_rdata;
@@ -65,6 +71,8 @@ module anv32im2_soc_top(
     logic        uart_rx_overflow;
     logic        uart_framing_error_pulse;
     logic        uart_rx_overflow_pulse;
+    logic [31:0] i2c_rdata;
+    logic        i2c_irq;
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_shift <= '0;
@@ -81,13 +89,17 @@ module anv32im2_soc_top(
     assign uart_status_sel = (mem_addr == UART_STATUS_ADDR);
     assign uart_baud_sel   = (mem_addr == UART_BAUD_ADDR);
     assign uart_error_sel  = (mem_addr == UART_ERROR_ADDR);
+    assign i2c_sel = (mem_addr[31:5] == I2C_BASE_ADDR[31:5]);
     assign mmio_sel = led_sel || gpio_irq_pending_sel || uart_txdata_sel ||
-                      uart_status_sel || uart_baud_sel || uart_error_sel;
+                      uart_status_sel || uart_baud_sel || uart_error_sel ||
+                      i2c_sel;
     assign led_write = led_sel && (mem_we != 4'b0);
     assign gpio_irq_pending_clear = gpio_irq_pending_sel && (mem_we != 4'b0) && mem_wdata[0];
     assign uart_tx_write    = uart_txdata_sel && (mem_we != 4'b0);
     assign uart_baud_write  = uart_baud_sel && (mem_we != 4'b0);
     assign uart_error_clear = uart_error_sel && (mem_we != 4'b0) && mem_wdata[0];
+    assign i2c_write = i2c_sel && (mem_we != 4'b0);
+    assign i2c_read  = i2c_sel && (mem_we == 4'b0);
     assign dmem_we = mmio_sel ? 4'b0 : mem_we;
     assign mmio_rdata = led_sel ? led_reg :
                         gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
@@ -102,6 +114,7 @@ module anv32im2_soc_top(
                                            uart_tx_ready} :
                         uart_baud_sel ? uart_baud_rate :
                         uart_error_sel ? {30'b0, uart_rx_overflow, uart_framing_error} :
+                        i2c_sel ? i2c_rdata :
                         32'b0;
     assign mem_rdata = mmio_sel_q ? mmio_rdata_q : dmem_rdata;
     assign gpio_irq_rise = gpio_irq_reg2 && !gpio_irq_reg2_q;
@@ -169,6 +182,27 @@ module anv32im2_soc_top(
         .rx_overflow_o          (uart_rx_overflow),
         .framing_error_pulse_o  (uart_framing_error_pulse),
         .rx_overflow_pulse_o    (uart_rx_overflow_pulse)
+    );
+
+    i2c_periph #(
+        .CLK_FREQ(27_000_000),
+        .CMD_FIFO_DEPTH(16),
+        .RX_FIFO_DEPTH(8),
+        .SCL_LOW_CYCLES(135),
+        .SCL_HIGH_CYCLES(135),
+        .STRETCH_TIMEOUT_CYCLES(270_000)
+    ) i2c (
+        .clk_i(clk_i),
+        .rst_i(rst_i),
+        .sel_i(i2c_sel),
+        .write_i(i2c_write),
+        .read_i(i2c_read),
+        .addr_i(mem_addr[4:0]),
+        .wdata_i(mem_wdata),
+        .rdata_o(i2c_rdata),
+        .sda_io(i2c_sda_io),
+        .scl_io(i2c_scl_io),
+        .irq_o(i2c_irq)
     );
 
     anv32im2_top core (
