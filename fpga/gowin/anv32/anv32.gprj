@@ -40,6 +40,7 @@
         <File path="../../../rtl/peripherals/i2c/core/i2c_byte_master_timed.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/core/i2c_cmd_master_timed.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/i2c_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32_forward_unit_im2.sv" type="file.verilog" enable="1"/>
         
         <File path="src/anv32.cst" type="file.cst" enable="1"/>
         <File path="src/anv32.sdc" type="file.sdc" enable="1"/>

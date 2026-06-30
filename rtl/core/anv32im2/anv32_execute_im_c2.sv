@@ -24,6 +24,10 @@ module anv32_execute_im_c2
     output einstr_t            einstr_o,
 
     output logic               mul_div_stall_o,
+    output logic               fwd_valid_o,
+    output logic               fwd_ready_o,
+    output logic    [4:0]      fwd_rd_idx_o,
+    output logic    [XLEN-1:0] fwd_data_o,
 
     output logic               trap_req_o,
     output logic    [XLEN-1:0] trap_pc_o,
@@ -151,6 +155,22 @@ module anv32_execute_im_c2
     assign pc_target_o    = pc_target;
     assign pc_changer_o   = dinstr_e2_i.is_pc_changer;
     assign valid_o        = dinstr_e2_i.valid;
+
+    assign fwd_valid_o  = dinstr_e2_i.valid && dinstr_e2_i.rd_valid;
+    assign fwd_ready_o  = fwd_valid_o &&
+                          dinstr_e2_i.wb_sel != WB_MEM &&
+                          !(HAS_M && is_div_op && !(div_ready_q || div_done));
+    assign fwd_rd_idx_o = dinstr_e2_i.rd_idx;
+
+    always_comb begin : fwd_data_comb
+        unique case (dinstr_e2_i.wb_sel)
+            WB_PC4:   fwd_data_o = pc_plus4;
+            WB_ALU:   fwd_data_o = dinstr_e2_i.is_csr              ? csr_rd_wdata  :
+                                   (HAS_M && dinstr_e2_i.is_muldiv)? muldiv_result :
+                                                                    alu_result;
+            default:  fwd_data_o = '0;
+        endcase
+    end
 
     always_ff @(posedge clk_i) begin
         if (rst_i || trap_req_o || mret_req_o || kill_i) begin

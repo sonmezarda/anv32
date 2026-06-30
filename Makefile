@@ -228,6 +228,7 @@ ANV32IM2_TOP_SRC := \
 	rtl/core/common/anv32_div.sv \
 	rtl/core/pipe5/anv32_hazard_basic.sv \
 	rtl/core/pipe5/anv32_forward_unit.sv \
+	rtl/core/anv32im2/anv32_forward_unit_im2.sv \
 	rtl/core/pipe5/anv32_fetch_c1.sv \
 	rtl/core/pipe5/anv32_decode_c1.sv \
 	rtl/core/anv32im2/anv32_execute_im_c1.sv \

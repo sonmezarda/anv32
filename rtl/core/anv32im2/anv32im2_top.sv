@@ -76,6 +76,9 @@ module anv32im2_top
     logic [XLEN-1:0]        irq_pc;
     logic                   csr_trap;
     logic [XLEN-1:0]        csr_trap_pc, csr_trap_cause, csr_trap_tval;
+    logic                   e2_fwd_valid, e2_fwd_ready;
+    logic [4:0]             e2_fwd_rd_idx;
+    logic [XLEN-1:0]        e2_fwd_data;
 
 // #endregion
    
@@ -101,36 +104,6 @@ module anv32im2_top
         end else begin
             return csr_value_i;
         end
-    endfunction
-
-    function automatic logic dinstr_rd_match(
-        input dinstr_t    producer_i,
-        input logic [4:0] src_idx_i
-    );
-        return producer_i.valid &&
-               producer_i.rd_valid &&
-               src_idx_i == producer_i.rd_idx;
-    endfunction
-
-    function automatic logic einstr_load_rd_match(
-        input einstr_t    producer_i,
-        input logic [4:0] src_idx_i
-    );
-        return producer_i.valid &&
-               producer_i.rd_valid &&
-               producer_i.wb_sel == WB_MEM &&
-               src_idx_i == producer_i.rd_idx;
-    endfunction
-
-    function automatic logic im2_raw_src_hazard(
-        input logic       src_valid_i,
-        input logic [4:0] src_idx_i
-    );
-        return src_valid_i &&
-               src_idx_i != 5'd0 &&
-               (dinstr_rd_match(dinstr,    src_idx_i) ||
-                dinstr_rd_match(dinstr_e2, src_idx_i) ||
-                einstr_load_rd_match(einstr, src_idx_i));
     endfunction
 
     always_comb begin : csr_redirect_bypass_comb
@@ -183,10 +156,6 @@ module anv32im2_top
     assign mem_wait_stall = dmem_valid && !mem_ready_i;
 
     assign stall_e     = md_stall;
-    assign stall_im2_raw = dinstr_decode.valid &&
-        (im2_raw_src_hazard(dinstr_decode.rs1_valid, dinstr_decode.rs1_idx) ||
-         im2_raw_src_hazard(dinstr_decode.rs2_valid, dinstr_decode.rs2_idx));
-
     assign stall_f_eff = stall_i || stall_f || stall_im2_raw || md_stall || mem_wait_stall;
     assign stall_d_eff = stall_i || stall_d || stall_im2_raw || md_stall || mem_wait_stall;
     assign stall_e_eff = stall_i || stall_e || mem_wait_stall;
@@ -209,21 +178,26 @@ module anv32im2_top
         .flush_D_o(flush_D)
     );
 
-    anv32_forward_unit fwd_unit (
+    anv32_forward_unit_im2 fwd_unit (
         .rs1_idx_i     (rs1_idx),
         .rs2_idx_i     (rs2_idx),
         .rs1_rdata_i   (rs1_rdata),
         .rs2_rdata_i   (rs2_rdata),
-        .dinstr_i      (dinstr),
+        .dinstr_decode_i(dinstr_decode),
+        .dinstr_e1_i   (dinstr),
+        .dinstr_e2_i   (dinstr_e2),
         .einstr_i      (einstr),
         .minstr_i      (minstr),
-        .rs1_fwd_sel_i (rs1_fwd_sel),
-        .rs2_fwd_sel_i (rs2_fwd_sel),
+        .e2_fwd_valid_i(e2_fwd_valid),
+        .e2_fwd_ready_i(e2_fwd_ready),
+        .e2_fwd_rd_idx_i(e2_fwd_rd_idx),
+        .e2_fwd_data_i (e2_fwd_data),
         .rd_wdata_i    (rd_wdata),
         .rs1_D_din_o   (rs1_D_din),
         .rs2_D_din_o   (rs2_D_din),
-        .rs1_E_din_o   (rs1_e1_rdata),
-        .rs2_E_din_o   (rs2_e1_rdata)
+        .rs1_E1_din_o  (rs1_e1_rdata),
+        .rs2_E1_din_o  (rs2_e1_rdata),
+        .stall_raw_o   (stall_im2_raw)
     );
 
     anv32_fetch_c1 #(.PC_RESET_VALUE(PC_RESET_VALUE)) fetch (
@@ -299,6 +273,10 @@ module anv32im2_top
         .valid_o(e_valid),
         .einstr_o(einstr),
         .mul_div_stall_o(e_mul_div_stall),
+        .fwd_valid_o(e2_fwd_valid),
+        .fwd_ready_o(e2_fwd_ready),
+        .fwd_rd_idx_o(e2_fwd_rd_idx),
+        .fwd_data_o(e2_fwd_data),
         .trap_req_o(trap_req),
         .trap_pc_o(trap_pc),
         .trap_cause_o(trap_cause),
