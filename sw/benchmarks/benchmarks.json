@@ -1,0 +1,59 @@
+[
+  {
+    "name": "compute_alu",
+    "src": "sw/benchmarks/compute_alu.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 6000,
+    "expected_x10": 1,
+    "tags": ["alu", "compute", "rv32i"]
+  },
+  {
+    "name": "branch_taken",
+    "src": "sw/benchmarks/branch_taken.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 4000,
+    "expected_x10": 1,
+    "tags": ["branch", "taken", "rv32i"]
+  },
+  {
+    "name": "branch_not_taken",
+    "src": "sw/benchmarks/branch_not_taken.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 4000,
+    "expected_x10": 1,
+    "tags": ["branch", "not_taken", "rv32i"]
+  },
+  {
+    "name": "branch_mixed",
+    "src": "sw/benchmarks/branch_mixed.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 4000,
+    "expected_x10": 1,
+    "tags": ["branch", "mixed", "rv32i"]
+  },
+  {
+    "name": "load_store",
+    "src": "sw/benchmarks/load_store.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 4000,
+    "expected_x10": 1,
+    "tags": ["memory", "load_store", "rv32i"]
+  },
+  {
+    "name": "balanced",
+    "src": "sw/benchmarks/balanced.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 5000,
+    "expected_x10": 1,
+    "tags": ["balanced", "memory", "branch", "compute", "rv32i"]
+  },
+  {
+    "name": "m_ext",
+    "src": "sw/benchmarks/m_ext.S",
+    "march": "rv32im_zicsr",
+    "max_cycles": 8000,
+    "expected_x10": 1,
+    "requires": ["m"],
+    "tags": ["rv32m", "mul", "div"]
+  }
+]

@@ -62,6 +62,11 @@ SPIKE_RAW_LOG ?=
 SPIKE_NORM_LOG ?=
 CORE_NORM_LOG ?=
 DIFF_LOG ?=
+BENCH_CORES ?= anv32i1,anv32im1,anv32im2
+BENCHMARKS ?= all
+BENCH_OUT_DIR ?= build/bench
+BENCH_FMAX_JSON ?=
+BENCH_FMAX ?=
 ASM_HARD_CYCLES ?= 180
 ASM_HARD_SPIKE_INSNS ?= 180
 ASM_HARD_TESTS ?= \
@@ -261,7 +266,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -519,6 +524,16 @@ mem-ready-trace:
 		$(SRC_mem_ready_trace); \
 	$(OBJ_DIR)/Vtb_mem_ready_stall
 
+bench:
+	@args=( \
+		--cores "$(BENCH_CORES)" \
+		--benchmarks "$(BENCHMARKS)" \
+		--out-dir "$(BENCH_OUT_DIR)" \
+	); \
+	if [ -n "$(BENCH_FMAX_JSON)" ]; then args+=(--fmax-json "$(BENCH_FMAX_JSON)"); fi; \
+	if [ -n "$(BENCH_FMAX)" ]; then args+=(--fmax "$(BENCH_FMAX)"); fi; \
+	$(PYTHON) tools/run_benchmarks.py "$${args[@]}"
+
 asm-golden-run:
 	@set -euo pipefail; \
 	src="$(GOLDEN_ASM_SRC)"; \
@@ -654,6 +669,11 @@ help:
 	@echo "  make asm-diff-test ASM=file.S"
 	@echo "                       Diff Spike golden commit log against the core"
 	@echo "  make asm-hard-test  Run the RV32I hard assembly diff suite"
+	@echo "  make bench          Run synthetic performance benchmarks on all cores"
+	@echo "  make bench BENCHMARKS=balanced BENCH_CORES=anv32im2"
+	@echo "                       Select benchmark names/tags and cores"
+	@echo "  make bench BENCH_FMAX='anv32i1=27,anv32im1=27,anv32im2=33'"
+	@echo "                       Include Fmax-normalized time and MIPS columns"
 	@echo "  make cpu-run CYCLES=40 TRACE=1"
 	@echo "                       Limit cycles and emit $(OBJ_DIR)/cpu_trace.vcd"
 	@echo "  make cpu-run PIPELINE_LOG=build/sw/trace.log"
@@ -683,6 +703,10 @@ help:
 	@echo "  PIPELINE_LOG=file    Write detailed pipeline trace to file"
 	@echo "  CORE_NORM_LOG=file   Write normalized core commit log"
 	@echo "  DIFF_LOG=file        Write Spike/core diff output"
+	@echo "  BENCHMARKS=all|name,tag"
+	@echo "                       Benchmark selection for make bench"
+	@echo "  BENCH_CORES=list     Core selection for make bench"
+	@echo "  BENCH_FMAX=core=MHz  Fmax values for normalized benchmark reporting"
 	@echo
 	@echo "Registered tests:"
 	@printf '  %s\n' $(TESTS)
