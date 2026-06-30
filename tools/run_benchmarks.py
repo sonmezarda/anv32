@@ -298,6 +298,11 @@ def write_outputs(out_dir: Path, results: list[dict]) -> None:
         "branches_not_taken",
         "static_nt_branch_mispredicts",
         "static_nt_mispredicts",
+        "raw_stall_cycles",
+        "load_use_stall_cycles",
+        "branch_redirect_cycles",
+        "muldiv_stall_cycles",
+        "mem_wait_stall_cycles",
         "loads",
         "stores",
         "alu_ops",
@@ -333,6 +338,11 @@ def print_table(results: list[dict]) -> None:
         "taken",
         "nt",
         "misp_nt",
+        "raw_stall",
+        "load_use",
+        "br_redir",
+        "md_stall",
+        "mem_wait",
     ]
     rows = []
     for r in results:
@@ -351,6 +361,11 @@ def print_table(results: list[dict]) -> None:
                 str(r["branches_taken"]),
                 str(r["branches_not_taken"]),
                 str(r["static_nt_branch_mispredicts"]),
+                str(r.get("raw_stall_cycles", 0)),
+                str(r.get("load_use_stall_cycles", 0)),
+                str(r.get("branch_redirect_cycles", 0)),
+                str(r.get("muldiv_stall_cycles", 0)),
+                str(r.get("mem_wait_stall_cycles", 0)),
             ]
         )
 

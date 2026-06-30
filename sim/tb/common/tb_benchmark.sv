@@ -36,6 +36,11 @@ module tb_benchmark
     int unsigned branches_not_taken = 0;
     int unsigned static_nt_mispredicts = 0;
     int unsigned static_nt_branch_mispredicts = 0;
+    int unsigned raw_stall_cycles = 0;
+    int unsigned load_use_stall_cycles = 0;
+    int unsigned branch_redirect_cycles = 0;
+    int unsigned muldiv_stall_cycles = 0;
+    int unsigned mem_wait_stall_cycles = 0;
     bit halt_seen = 1'b0;
     bit pass = 1'b0;
     logic [31:0] final_x10;
@@ -176,7 +181,62 @@ module tb_benchmark
     task automatic sample_counters();
         bit ctrl_valid;
         bit actual_taken;
+        bit load_use_hazard;
         op_e ctrl_op;
+
+`ifdef ANV32_BENCH_CORE_ANV32I1
+        if (dut.stall_de) begin
+            raw_stall_cycles++;
+            load_use_stall_cycles++;
+        end
+        if (dut.pc_jmp_en) begin
+            branch_redirect_cycles++;
+        end
+`elsif ANV32_BENCH_CORE_ANV32IM1
+        if (dut.stall_d) begin
+            raw_stall_cycles++;
+            load_use_stall_cycles++;
+        end
+        if (dut.md_stall) begin
+            muldiv_stall_cycles++;
+        end
+        if (dut.pc_jmp_en) begin
+            branch_redirect_cycles++;
+        end
+`elsif ANV32_BENCH_CORE_ANV32IM2
+        load_use_hazard =
+            dut.dinstr_decode.valid &&
+            (((dut.dinstr_decode.rs1_valid && dut.dinstr_decode.rs1_idx != 5'd0) &&
+              ((dut.dinstr.valid && dut.dinstr.rd_valid && dut.dinstr.wb_sel == WB_MEM &&
+                dut.dinstr_decode.rs1_idx == dut.dinstr.rd_idx) ||
+               (dut.dinstr_e2.valid && dut.dinstr_e2.rd_valid && dut.dinstr_e2.wb_sel == WB_MEM &&
+                dut.dinstr_decode.rs1_idx == dut.dinstr_e2.rd_idx) ||
+               (dut.einstr.valid && dut.einstr.rd_valid && dut.einstr.wb_sel == WB_MEM &&
+                dut.dinstr_decode.rs1_idx == dut.einstr.rd_idx))) ||
+             ((dut.dinstr_decode.rs2_valid && dut.dinstr_decode.rs2_idx != 5'd0) &&
+              ((dut.dinstr.valid && dut.dinstr.rd_valid && dut.dinstr.wb_sel == WB_MEM &&
+                dut.dinstr_decode.rs2_idx == dut.dinstr.rd_idx) ||
+               (dut.dinstr_e2.valid && dut.dinstr_e2.rd_valid && dut.dinstr_e2.wb_sel == WB_MEM &&
+                dut.dinstr_decode.rs2_idx == dut.dinstr_e2.rd_idx) ||
+               (dut.einstr.valid && dut.einstr.rd_valid && dut.einstr.wb_sel == WB_MEM &&
+                dut.dinstr_decode.rs2_idx == dut.einstr.rd_idx))));
+
+        if (dut.stall_im2_raw && !dut.md_stall && !dut.mem_wait_stall) begin
+            raw_stall_cycles++;
+        end
+        if (load_use_hazard && !dut.md_stall && !dut.mem_wait_stall) begin
+            load_use_stall_cycles++;
+        end
+        if (dut.md_stall) begin
+            muldiv_stall_cycles++;
+        end
+        if (dut.mem_wait_stall) begin
+            mem_wait_stall_cycles++;
+        end
+        if (dut.pc_jmp_en) begin
+            branch_redirect_cycles++;
+        end
+`endif
 
         if (dut.minstr.valid) begin
             commits++;
@@ -245,7 +305,7 @@ module tb_benchmark
         final_x10 = dut.regfile.regfile[10];
         pass = halt_seen && (!CHECK_X10 || final_x10 == EXPECT_X10);
 
-        $display("BENCH_RESULT status=%s cycles=%0d commits=%0d alu_ops=%0d muldiv_ops=%0d loads=%0d stores=%0d control_ops=%0d jumps=%0d branches=%0d branches_taken=%0d branches_not_taken=%0d static_nt_mispredicts=%0d static_nt_branch_mispredicts=%0d final_x10=0x%08h expected_x10=0x%08h",
+        $display("BENCH_RESULT status=%s cycles=%0d commits=%0d alu_ops=%0d muldiv_ops=%0d loads=%0d stores=%0d control_ops=%0d jumps=%0d branches=%0d branches_taken=%0d branches_not_taken=%0d static_nt_mispredicts=%0d static_nt_branch_mispredicts=%0d raw_stall_cycles=%0d load_use_stall_cycles=%0d branch_redirect_cycles=%0d muldiv_stall_cycles=%0d mem_wait_stall_cycles=%0d final_x10=0x%08h expected_x10=0x%08h",
                  pass ? "PASS" : "FAIL",
                  cycle,
                  commits,
@@ -260,6 +320,11 @@ module tb_benchmark
                  branches_not_taken,
                  static_nt_mispredicts,
                  static_nt_branch_mispredicts,
+                 raw_stall_cycles,
+                 load_use_stall_cycles,
+                 branch_redirect_cycles,
+                 muldiv_stall_cycles,
+                 mem_wait_stall_cycles,
                  final_x10,
                  EXPECT_X10);
 

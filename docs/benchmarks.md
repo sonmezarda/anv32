@@ -51,9 +51,20 @@ The runner writes:
 - `misp_nt`: conditional branch misses for a static not-taken predictor
 - `time_us`: `cycles / fmax_mhz`, only when Fmax is provided
 - `MIPS`: `commits * fmax_mhz / cycles`, only when Fmax is provided
+- `raw_stall`: cycles where the front-end/decode side stalled for a data hazard
+- `load_use`: cycles where that data hazard involved a load result
+- `br_redir`: cycles where the core asserted a branch/jump redirect
+- `md_stall`: cycles spent waiting for the multi-cycle multiply/divide unit
+- `mem_wait`: cycles spent waiting for data memory ready/valid handshaking
 
 `static_nt_mispredicts` in the JSON/CSV includes unconditional jumps as
 redirects too. The table's `misp_nt` column is conditional branches only.
+
+`time_us` is total benchmark runtime in microseconds at the given Fmax. Since
+1 MHz is 1 cycle per microsecond, `time_us = cycles / fmax_mhz`.
+
+`MIPS` means million instructions per second. The runner uses committed
+instructions, so `MIPS = commits / time_us = commits * fmax_mhz / cycles`.
 
 ## Benchmark Programs
 
