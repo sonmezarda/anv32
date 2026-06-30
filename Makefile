@@ -67,6 +67,7 @@ BENCHMARKS ?= all
 BENCH_OUT_DIR ?= build/bench
 BENCH_FMAX_JSON ?=
 BENCH_FMAX ?=
+BENCH_OPT ?= -Os
 ASM_HARD_CYCLES ?= 180
 ASM_HARD_SPIKE_INSNS ?= 180
 ASM_HARD_TESTS ?= \
@@ -530,6 +531,7 @@ bench:
 		--cores "$(BENCH_CORES)" \
 		--benchmarks "$(BENCHMARKS)" \
 		--out-dir "$(BENCH_OUT_DIR)" \
+		--opt="$(BENCH_OPT)" \
 	); \
 	if [ -n "$(BENCH_FMAX_JSON)" ]; then args+=(--fmax-json "$(BENCH_FMAX_JSON)"); fi; \
 	if [ -n "$(BENCH_FMAX)" ]; then args+=(--fmax "$(BENCH_FMAX)"); fi; \
@@ -675,6 +677,8 @@ help:
 	@echo "                       Select benchmark names/tags and cores"
 	@echo "  make bench BENCH_FMAX='anv32i1=27,anv32im1=27,anv32im2=33'"
 	@echo "                       Include Fmax-normalized time and MIPS columns"
+	@echo "  make bench BENCHMARKS=c BENCH_OPT=-O2"
+	@echo "                       Compile C benchmarks with a selected optimization"
 	@echo "  make cpu-run CYCLES=40 TRACE=1"
 	@echo "                       Limit cycles and emit $(OBJ_DIR)/cpu_trace.vcd"
 	@echo "  make cpu-run PIPELINE_LOG=build/sw/trace.log"
@@ -708,6 +712,7 @@ help:
 	@echo "                       Benchmark selection for make bench"
 	@echo "  BENCH_CORES=list     Core selection for make bench"
 	@echo "  BENCH_FMAX=core=MHz  Fmax values for normalized benchmark reporting"
+	@echo "  BENCH_OPT=-Os|-O2    C benchmark optimization level"
 	@echo
 	@echo "Registered tests:"
 	@printf '  %s\n' $(TESTS)

@@ -47,8 +47,10 @@ module tb_cpu_trace
         .instr_i(instr_rdata),
         .instr_addr_o(instr_addr),
         .mem_rdata_i(mem_rdata),
+        .mem_ready_i(1'b1),
         .mem_wdata_o(mem_wdata),
         .mem_addr_o(mem_addr),
+        .mem_valid_o(),
         .mem_we(mem_we)
     );
 

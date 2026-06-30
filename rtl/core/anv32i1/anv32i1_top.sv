@@ -14,14 +14,17 @@ module anv32i1_top
     output logic [XLEN-1:0] instr_addr_o,
 
     input  logic [XLEN-1:0] mem_rdata_i,
+    input  logic            mem_ready_i,
     output logic [XLEN-1:0] mem_wdata_o,
     output logic [XLEN-1:0] mem_addr_o,
+    output logic            mem_valid_o,
     output logic [3:0]      mem_we
 );
     logic [XLEN-1:0] fetch_addr;
 
     logic [XLEN-1:0]        dmem_wdata;
     logic [3:0]             dmem_we;
+    logic                   dmem_valid;
 
     logic                   stall_f, stall_de, stall_e, stall_m, stall_w;
 
@@ -91,6 +94,7 @@ module anv32i1_top
 
     assign mem_wdata_o = dmem_wdata;
     assign mem_addr_o  = m_stage_dmem_addr_out;
+    assign mem_valid_o = dmem_valid;
     assign mem_we      = dmem_we;
     assign instr_addr_o = fetch_addr;
 
@@ -292,7 +296,7 @@ module anv32i1_top
         .stall_i(stall_m_eff),
         .einstr_i(einstr),
         .mem_rdata_i(mem_rdata_i),
-        .mem_valid_o(),
+        .mem_valid_o(dmem_valid),
         .mem_addr_o(m_stage_dmem_addr_out),   //
         .mem_wdata_o(dmem_wdata),
         .mem_we_o(dmem_we),

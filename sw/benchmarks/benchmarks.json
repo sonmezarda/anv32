@@ -1,6 +1,7 @@
 [
   {
     "name": "compute_alu",
+    "type": "asm",
     "src": "sw/benchmarks/compute_alu.S",
     "march": "rv32i_zicsr",
     "max_cycles": 6000,
@@ -9,6 +10,7 @@
   },
   {
     "name": "branch_taken",
+    "type": "asm",
     "src": "sw/benchmarks/branch_taken.S",
     "march": "rv32i_zicsr",
     "max_cycles": 4000,
@@ -17,6 +19,7 @@
   },
   {
     "name": "branch_not_taken",
+    "type": "asm",
     "src": "sw/benchmarks/branch_not_taken.S",
     "march": "rv32i_zicsr",
     "max_cycles": 4000,
@@ -25,6 +28,7 @@
   },
   {
     "name": "branch_mixed",
+    "type": "asm",
     "src": "sw/benchmarks/branch_mixed.S",
     "march": "rv32i_zicsr",
     "max_cycles": 4000,
@@ -33,6 +37,7 @@
   },
   {
     "name": "load_store",
+    "type": "asm",
     "src": "sw/benchmarks/load_store.S",
     "march": "rv32i_zicsr",
     "max_cycles": 4000,
@@ -41,6 +46,7 @@
   },
   {
     "name": "balanced",
+    "type": "asm",
     "src": "sw/benchmarks/balanced.S",
     "march": "rv32i_zicsr",
     "max_cycles": 5000,
@@ -49,11 +55,69 @@
   },
   {
     "name": "m_ext",
+    "type": "asm",
     "src": "sw/benchmarks/m_ext.S",
     "march": "rv32im_zicsr",
     "max_cycles": 8000,
     "expected_x10": 1,
     "requires": ["m"],
     "tags": ["rv32m", "mul", "div"]
+  },
+  {
+    "name": "c_crc32",
+    "type": "c",
+    "src": "sw/benchmarks_c/crc32.c",
+    "march": "rv32i_zicsr",
+    "max_cycles": 20000,
+    "expected_x10": 1,
+    "tags": ["c", "crc", "bitwise", "branch", "rv32i"]
+  },
+  {
+    "name": "c_matrix_mul_4x4",
+    "type": "c",
+    "src": "sw/benchmarks_c/matrix_mul_4x4.c",
+    "march": "rv32i_zicsr",
+    "march_by_core": {
+      "anv32im1": "rv32im_zicsr",
+      "anv32im2": "rv32im_zicsr"
+    },
+    "max_cycles": 20000,
+    "expected_x10": 1,
+    "tags": ["c", "matrix", "mul", "memory", "rv32i", "rv32m"]
+  },
+  {
+    "name": "c_fir_filter",
+    "type": "c",
+    "src": "sw/benchmarks_c/fir_filter.c",
+    "march": "rv32i_zicsr",
+    "march_by_core": {
+      "anv32im1": "rv32im_zicsr",
+      "anv32im2": "rv32im_zicsr"
+    },
+    "max_cycles": 100000,
+    "expected_x10": 1,
+    "tags": ["c", "dsp", "fir", "mul", "memory", "rv32i", "rv32m"]
+  },
+  {
+    "name": "c_memcpy_words",
+    "type": "c",
+    "src": "sw/benchmarks_c/memcpy_words.c",
+    "march": "rv32i_zicsr",
+    "max_cycles": 20000,
+    "expected_x10": 1,
+    "tags": ["c", "memory", "copy", "rv32i"]
+  },
+  {
+    "name": "c_branchy_state",
+    "type": "c",
+    "src": "sw/benchmarks_c/branchy_state.c",
+    "march": "rv32i_zicsr",
+    "march_by_core": {
+      "anv32im1": "rv32im_zicsr",
+      "anv32im2": "rv32im_zicsr"
+    },
+    "max_cycles": 25000,
+    "expected_x10": 1,
+    "tags": ["c", "branch", "state_machine", "rv32i", "rv32m"]
   }
 ]

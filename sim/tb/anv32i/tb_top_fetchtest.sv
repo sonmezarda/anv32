@@ -41,7 +41,8 @@ module tb_fetch_stage;
         .ext_irq_i(1'b0),
         .pc_o(pc_o), .instr_o(instr_o), .instr_valid_o(instr_valid),
         .instr_i(instr_rdata), .instr_addr_o(instr_addr),
-        .mem_rdata_i(32'b0), .mem_wdata_o(), .mem_addr_o(), .mem_we()
+        .mem_rdata_i(32'b0), .mem_ready_i(1'b1),
+        .mem_wdata_o(), .mem_addr_o(), .mem_valid_o(), .mem_we()
     );
 
     anv32_bram_tdp #(

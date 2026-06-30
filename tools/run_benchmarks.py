@@ -127,6 +127,7 @@ def load_benchmarks(path: Path) -> list[dict]:
     with path.open() as f:
         benches = json.load(f)
     for bench in benches:
+        bench.setdefault("type", "asm")
         bench.setdefault("requires", [])
         bench.setdefault("expected_x10", 1)
     return benches
@@ -156,38 +157,38 @@ def compatible(core: str, bench: dict) -> bool:
     return set(bench["requires"]).issubset(CORE_FEATURES[core])
 
 
-def build_program(args: argparse.Namespace, repo: Path, bench: dict, out_dir: Path) -> Path:
+def benchmark_march(core: str, bench: dict) -> str:
+    return bench.get("march_by_core", {}).get(core, bench["march"])
+
+
+def build_program(args: argparse.Namespace, repo: Path, bench: dict, out_dir: Path, core: str) -> Path:
     name = bench["name"]
-    prog_dir = out_dir / "programs" / name
+    march = benchmark_march(core, bench)
+    build_type = bench.get("type", "asm")
+    opt = bench.get("opt", args.opt)
+    variant = f"{name}_{march.replace('_', '-').replace('/', '-')}_{opt.replace('-', '')}"
+    prog_dir = out_dir / "programs" / variant
     prog_dir.mkdir(parents=True, exist_ok=True)
+
+    builder = "tools/build_rv32_program.py" if build_type == "c" else "tools/build_rv32_asm_program.py"
     cmd = [
         args.python,
-        "tools/build_rv32_asm_program.py",
-        "--src",
-        bench["src"],
-        "--out-dir",
-        str(prog_dir),
-        "--name",
-        name,
-        "--linker",
-        args.linker,
-        "--cc",
-        args.cc,
-        "--march",
-        bench["march"],
-        "--mabi",
-        args.mabi,
-        "--objcopy",
-        args.objcopy,
-        "--objdump",
-        args.objdump,
-        "--bin-to-hex",
-        "tools/bin_to_hex.py",
-        "--split-hex",
-        "tools/split_hex.py",
-        "--python",
-        args.python,
+        builder,
+        "--src", bench["src"],
+        "--out-dir", str(prog_dir),
+        "--name", name,
+        "--linker", args.linker,
+        "--cc", args.cc,
+        "--march", march,
+        "--mabi", args.mabi,
+        "--objcopy", args.objcopy,
+        "--objdump", args.objdump,
+        "--bin-to-hex", "tools/bin_to_hex.py",
+        "--split-hex", "tools/split_hex.py",
+        "--python", args.python,
     ]
+    if build_type == "c":
+        cmd.extend(["--crt0", args.crt0, f"--opt={opt}"])
     run(cmd, cwd=repo, verbose=args.verbose)
     return prog_dir / name
 
@@ -232,7 +233,8 @@ def run_benchmark(
             "core": core,
             "benchmark": bench["name"],
             "tags": ",".join(bench.get("tags", [])),
-            "march": bench["march"],
+            "type": bench.get("type", "asm"),
+            "march": benchmark_march(core, bench),
             "max_cycles": max_cycles,
         }
     )
@@ -287,6 +289,7 @@ def write_outputs(out_dir: Path, results: list[dict]) -> None:
     fields = [
         "benchmark",
         "core",
+        "type",
         "status",
         "cycles",
         "commits",
@@ -328,6 +331,7 @@ def print_table(results: list[dict]) -> None:
     headers = [
         "benchmark",
         "core",
+        "type",
         "status",
         "cycles",
         "commits",
@@ -351,6 +355,7 @@ def print_table(results: list[dict]) -> None:
             [
                 r["benchmark"],
                 r["core"],
+                r.get("type", "asm"),
                 r["status"],
                 str(r["cycles"]),
                 str(r["commits"]),
@@ -399,6 +404,8 @@ def main() -> int:
     parser.add_argument("--objdump", default="riscv64-unknown-elf-objdump")
     parser.add_argument("--mabi", default="ilp32")
     parser.add_argument("--linker", default="sw/common/link.ld")
+    parser.add_argument("--crt0", default="sw/common/crt0.S")
+    parser.add_argument("--opt", default="-Os")
     args = parser.parse_args()
 
     repo = Path.cwd()
@@ -419,24 +426,19 @@ def main() -> int:
     fmax = parse_fmax(args)
     results: list[dict] = []
     failures = 0
-    image_cache: dict[str, Path] = {}
+    image_cache: dict[tuple[str, str, str, str], Path] = {}
 
     for bench in benches:
-        try:
-            image_cache[bench["name"]] = build_program(args, repo, bench, out_dir)
-        except Exception as exc:
-            failures += 1
-            print(f"BUILD_FAIL benchmark={bench['name']} error={exc}", file=sys.stderr)
-            if not args.keep_going:
-                return 1
-            continue
-
         for core in cores:
             if not compatible(core, bench):
                 continue
             try:
+                opt = bench.get("opt", args.opt)
+                cache_key = (bench["name"], benchmark_march(core, bench), bench.get("type", "asm"), opt)
+                if cache_key not in image_cache:
+                    image_cache[cache_key] = build_program(args, repo, bench, out_dir, core)
                 print(f"RUN benchmark={bench['name']} core={core}", flush=True)
-                result = run_benchmark(args, repo, core, bench, image_cache[bench["name"]], out_dir)
+                result = run_benchmark(args, repo, core, bench, image_cache[cache_key], out_dir)
                 enrich(result, fmax)
                 results.append(result)
             except Exception as exc:

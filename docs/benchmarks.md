@@ -68,12 +68,19 @@ instructions, so `MIPS = commits / time_us = commits * fmax_mhz / cycles`.
 
 ## Benchmark Programs
 
-Benchmarks live under `sw/benchmarks` and are described by
+Assembly microbenchmarks live under `sw/benchmarks`; C kernel benchmarks live
+under `sw/benchmarks_c`. Both are described by
 `sw/benchmarks/benchmarks.json`. Each program self-checks and writes:
 
 - `a0 = 1` on pass
 - `a0 = 0` on fail
 
-The testbench checks `a0` after the final `EBREAK`. Add a new assembly program,
-then add an entry to `benchmarks.json` with `name`, `src`, `march`,
+The testbench checks `a0` after the final `EBREAK`. Assembly entries use
+`"type": "asm"` and C entries use `"type": "c"`. Add a new program, then add
+an entry to `benchmarks.json` with `name`, `type`, `src`, `march`,
 `max_cycles`, `expected_x10`, and optional `requires`/`tags`.
+
+C benchmarks can use `march_by_core` when the same source should be compiled
+differently per core. For example, `anv32i1` can use `rv32i_zicsr` while
+`anv32im1` and `anv32im2` use `rv32im_zicsr`, letting compiler-generated
+multiply/divide instructions exercise the M extension.
