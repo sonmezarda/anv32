@@ -24,6 +24,7 @@ module anv32_soc_top #(
     localparam logic [31:0] UART_BAUD_ADDR        = 32'h1000_1008;
     localparam logic [31:0] UART_ERROR_ADDR       = 32'h1000_100C;
     localparam logic [31:0] I2C_BASE_ADDR         = 32'h1000_2000;
+    localparam logic [31:0] NN_ACCEL_BASE_ADDR    = 32'h1000_3000;
 
     logic rst_i;
     logic [POR_CYCLES-1:0] por_shift = '0;
@@ -82,6 +83,11 @@ module anv32_soc_top #(
     logic        uart_rx_overflow_pulse;
     logic [31:0] i2c_rdata;
     logic        i2c_irq;
+    logic        nn_accel_hit;
+    logic        nn_accel_ready;
+    logic [31:0] nn_accel_rdata;
+    logic        nn_accel_irq;
+    logic        external_irq;
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_shift <= '0;
@@ -102,7 +108,7 @@ module anv32_soc_top #(
     assign i2c_sel = mem_valid && (mem_addr[31:5] == I2C_BASE_ADDR[31:5]);
     assign mmio_sel = led_sel || gpio_irq_pending_sel || uart_txdata_sel ||
                       uart_status_sel || uart_baud_sel || uart_error_sel ||
-                      i2c_sel;
+                      i2c_sel || nn_accel_hit;
 
     assign led_write = led_sel && mem_ready && (mem_we != 4'b0);
     assign gpio_irq_pending_clear = gpio_irq_pending_sel && mem_ready && (mem_we != 4'b0) && mem_wdata[0];
@@ -112,7 +118,7 @@ module anv32_soc_top #(
     assign i2c_write = i2c_sel && mem_ready && (mem_we != 4'b0);
     assign i2c_read  = i2c_sel && mem_ready && (mem_we == 4'b0);
 
-    assign mem_ready = 1'b1;
+    assign mem_ready = nn_accel_hit ? nn_accel_ready : 1'b1;
     assign dmem_we = (mem_valid && !mmio_sel && mem_ready) ? mem_we : 4'b0;
     assign mmio_rdata = led_sel ? led_reg :
                         gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
@@ -128,9 +134,11 @@ module anv32_soc_top #(
                         uart_baud_sel ? uart_baud_rate :
                         uart_error_sel ? {30'b0, uart_rx_overflow, uart_framing_error} :
                         i2c_sel ? i2c_rdata :
+                        nn_accel_hit ? nn_accel_rdata :
                         32'b0;
     assign mem_rdata = mmio_sel_q ? mmio_rdata_q : dmem_rdata;
     assign gpio_irq_rise = gpio_irq_reg2 && !gpio_irq_reg2_q;
+    assign external_irq = gpio_irq_pending || nn_accel_irq;
 
     always_ff @(posedge clk_i) begin
         if (rst_i) begin
@@ -218,6 +226,22 @@ module anv32_soc_top #(
         .irq_o(i2c_irq)
     );
 
+    nn_accel_periph #(
+        .BASE_ADDR(NN_ACCEL_BASE_ADDR),
+        .SCRATCH_WORDS(4096)
+    ) nn_accel (
+        .clk_i(clk_i),
+        .rst_i(rst_i),
+        .mem_valid_i(mem_valid),
+        .mem_addr_i(mem_addr),
+        .mem_wdata_i(mem_wdata),
+        .mem_we_i(mem_we),
+        .mem_ready_o(nn_accel_ready),
+        .mem_rdata_o(nn_accel_rdata),
+        .mem_hit_o(nn_accel_hit),
+        .irq_o(nn_accel_irq)
+    );
+
     generate
         if (CORE_TYPE == CORE_ANV32I1) begin : g_core_i1
             anv32i1_top core (
@@ -226,7 +250,7 @@ module anv32_soc_top #(
                 .stall_i(1'b0),
                 .pc_jmp_en_i(1'b0),
                 .pc_jmp_addr_i(32'b0),
-                .ext_irq_i(gpio_irq_pending),
+                .ext_irq_i(external_irq),
                 .instr_o(),
                 .pc_o(),
                 .instr_valid_o(),
@@ -246,7 +270,7 @@ module anv32_soc_top #(
                 .stall_i(1'b0),
                 .pc_jmp_en_i(1'b0),
                 .pc_jmp_addr_i(32'b0),
-                .ext_irq_i(gpio_irq_pending),
+                .ext_irq_i(external_irq),
                 .instr_o(),
                 .pc_o(),
                 .instr_valid_o(),
@@ -266,7 +290,7 @@ module anv32_soc_top #(
                 .stall_i(1'b0),
                 .pc_jmp_en_i(1'b0),
                 .pc_jmp_addr_i(32'b0),
-                .ext_irq_i(gpio_irq_pending),
+                .ext_irq_i(external_irq),
                 .instr_o(),
                 .pc_o(),
                 .instr_valid_o(),

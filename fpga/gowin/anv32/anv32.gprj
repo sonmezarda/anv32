@@ -41,6 +41,11 @@
         <File path="../../../rtl/peripherals/i2c/core/i2c_byte_master_timed.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/core/i2c_cmd_master_timed.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/i2c_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/int8_dot4.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/dot_product_stream.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/mem_dot_product_stream.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/dense_layer_engine.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/nn_accel_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32im2/anv32_forward_unit_im2.sv" type="file.verilog" enable="1"/>
         
         <File path="src/anv32.cst" type="file.cst" enable="1"/>
