@@ -683,6 +683,8 @@ help:
 	@echo "                       Limit cycles and emit $(OBJ_DIR)/cpu_trace.vcd"
 	@echo "  make cpu-run PIPELINE_LOG=build/sw/trace.log"
 	@echo "                       Write detailed pipeline trace to a file"
+	@echo "  make mem-ready-trace CYCLES=100 MEM_READY_WAIT=3"
+	@echo "                       Inject data-memory wait states and check pipeline stalls"
 	@echo "  make WARN=1 de       Show Verilator lint warnings"
 	@echo "  make clean           Remove build output and generated hex"
 	@echo

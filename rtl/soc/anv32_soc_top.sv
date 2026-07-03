@@ -1,5 +1,5 @@
 module anv32_soc_top #(
-    parameter int unsigned CORE_TYPE   = 0,
+    parameter int unsigned CORE_TYPE   = 2,
     parameter int unsigned BRAM_ADDR_W = 10,
     parameter int unsigned POR_CYCLES  = 8,
     parameter              INIT_FILE   = "src/prog"
