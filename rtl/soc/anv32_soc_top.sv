@@ -23,6 +23,7 @@ module anv32_soc_top #(
     localparam logic [31:0] UART_STATUS_ADDR      = 32'h1000_1004;
     localparam logic [31:0] UART_BAUD_ADDR        = 32'h1000_1008;
     localparam logic [31:0] UART_ERROR_ADDR       = 32'h1000_100C;
+    localparam logic [31:0] UART_RXDATA_ADDR      = 32'h1000_1010;
     localparam logic [31:0] I2C_BASE_ADDR         = 32'h1000_2000;
     localparam logic [31:0] NN_ACCEL_BASE_ADDR    = 32'h1000_3000;
 
@@ -54,10 +55,12 @@ module anv32_soc_top #(
     logic                   uart_status_sel;
     logic                   uart_baud_sel;
     logic                   uart_error_sel;
+    logic                   uart_rxdata_sel;
     logic                   i2c_sel;
     logic                   uart_tx_write;
     logic                   uart_baud_write;
     logic                   uart_error_clear;
+    logic                   uart_rx_read;
     logic                   i2c_write;
     logic                   i2c_read;
     logic                   mmio_sel;
@@ -86,6 +89,9 @@ module anv32_soc_top #(
     logic        nn_accel_hit;
     logic        nn_accel_ready;
     logic [31:0] nn_accel_rdata;
+    logic        nn_scratch_sel;
+    logic        nn_scratch_sel_q;
+    logic [31:0] nn_scratch_rdata;
     logic        nn_accel_irq;
     logic        external_irq;
 
@@ -105,16 +111,18 @@ module anv32_soc_top #(
     assign uart_status_sel = mem_valid && (mem_addr == UART_STATUS_ADDR);
     assign uart_baud_sel   = mem_valid && (mem_addr == UART_BAUD_ADDR);
     assign uart_error_sel  = mem_valid && (mem_addr == UART_ERROR_ADDR);
+    assign uart_rxdata_sel = mem_valid && (mem_addr == UART_RXDATA_ADDR);
     assign i2c_sel = mem_valid && (mem_addr[31:5] == I2C_BASE_ADDR[31:5]);
     assign mmio_sel = led_sel || gpio_irq_pending_sel || uart_txdata_sel ||
                       uart_status_sel || uart_baud_sel || uart_error_sel ||
-                      i2c_sel || nn_accel_hit;
+                      uart_rxdata_sel || i2c_sel || nn_accel_hit;
 
     assign led_write = led_sel && mem_ready && (mem_we != 4'b0);
     assign gpio_irq_pending_clear = gpio_irq_pending_sel && mem_ready && (mem_we != 4'b0) && mem_wdata[0];
     assign uart_tx_write    = uart_txdata_sel && mem_ready && (mem_we != 4'b0);
     assign uart_baud_write  = uart_baud_sel && mem_ready && (mem_we != 4'b0);
     assign uart_error_clear = uart_error_sel && mem_ready && (mem_we != 4'b0) && mem_wdata[0];
+    assign uart_rx_read     = uart_rxdata_sel && mem_ready && (mem_we == 4'b0);
     assign i2c_write = i2c_sel && mem_ready && (mem_we != 4'b0);
     assign i2c_read  = i2c_sel && mem_ready && (mem_we == 4'b0);
 
@@ -133,10 +141,15 @@ module anv32_soc_top #(
                                            uart_tx_ready} :
                         uart_baud_sel ? uart_baud_rate :
                         uart_error_sel ? {30'b0, uart_rx_overflow, uart_framing_error} :
+                        uart_rxdata_sel ? {24'b0, uart_rx_data} :
                         i2c_sel ? i2c_rdata :
                         nn_accel_hit ? nn_accel_rdata :
                         32'b0;
-    assign mem_rdata = mmio_sel_q ? mmio_rdata_q : dmem_rdata;
+    // NN scratch reads bypass the registered MMIO mux: the scratch BRAM output
+    // is already registered, so the data is valid exactly one cycle after the
+    // request, matching the data-BRAM timing.
+    assign mem_rdata = nn_scratch_sel_q ? nn_scratch_rdata :
+                       mmio_sel_q ? mmio_rdata_q : dmem_rdata;
     assign gpio_irq_rise = gpio_irq_reg2 && !gpio_irq_reg2_q;
     assign external_irq = gpio_irq_pending || nn_accel_irq;
 
@@ -150,6 +163,7 @@ module anv32_soc_top #(
             uart_baud_rate   <= 32'd115200;
             mmio_sel_q       <= 1'b0;
             mmio_rdata_q     <= 32'b0;
+            nn_scratch_sel_q <= 1'b0;
         end else if (led_write) begin
             led_reg <= mem_wdata;
         end else if (uart_baud_write) begin
@@ -159,6 +173,7 @@ module anv32_soc_top #(
         if (!rst_i) begin
             mmio_sel_q   <= mmio_sel;
             mmio_rdata_q <= mmio_rdata;
+            nn_scratch_sel_q <= nn_scratch_sel;
 
             gpio_irq_reg    <= gpio_irq_i;
             gpio_irq_reg2   <= gpio_irq_reg;
@@ -192,7 +207,7 @@ module anv32_soc_top #(
         .tx_empty_o             (uart_tx_empty),
         .tx_busy_o              (uart_tx_busy),
         .tx_done_o              (uart_tx_done),
-        .rx_read_i              (1'b0),
+        .rx_read_i              (uart_rx_read),
         .rx_data_o              (uart_rx_data),
         .rx_valid_o             (uart_rx_valid),
         .rx_empty_o             (uart_rx_empty),
@@ -239,6 +254,8 @@ module anv32_soc_top #(
         .mem_ready_o(nn_accel_ready),
         .mem_rdata_o(nn_accel_rdata),
         .mem_hit_o(nn_accel_hit),
+        .scratch_rdata_o(nn_scratch_rdata),
+        .scratch_sel_o(nn_scratch_sel),
         .irq_o(nn_accel_irq)
     );
 

@@ -39,5 +39,7 @@ local/
 /tmp
 
 lcl*
-
+/data
 *obj_dir/
+
+*.pyc

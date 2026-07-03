@@ -15,6 +15,10 @@ module nn_accel_periph #(
     output logic [31:0] mem_rdata_o,
     output logic        mem_hit_o,
 
+    // Scratch read bypass: data valid the cycle after the request.
+    output logic [31:0] scratch_rdata_o,
+    output logic        scratch_sel_o,
+
     output logic        irq_o
 );
 
@@ -29,6 +33,7 @@ module nn_accel_periph #(
     localparam logic [31:0] REG_CONFIG             = 32'h0000_0020;
     localparam logic [31:0] REG_RESULT_ARGMAX      = 32'h0000_0024;
     localparam logic [31:0] REG_BEST_SCORE         = 32'h0000_0028;
+    localparam logic [31:0] REG_CYCLE_COUNT        = 32'h0000_002C;
 
     localparam logic [31:0] SCRATCH_BYTES =
         32'(SCRATCH_WORDS) << 2;
@@ -57,6 +62,7 @@ module nn_accel_periph #(
     logic signed [31:0] best_score_q;
     logic [15:0] best_index_q;
     logic        best_valid_q;
+    logic [31:0] cycle_count_q;
 
     logic dense_busy;
     logic dense_done;
@@ -135,6 +141,16 @@ module nn_accel_periph #(
 
     assign mem_ready_o =
         periph_hit;
+
+    // Scratch read data comes from the registered BRAM output, so it is valid
+    // one cycle after the address is presented — same timing as the SoC data
+    // BRAM. The SoC must consume it directly instead of through its extra
+    // MMIO read register, which would add a second cycle of latency.
+    assign scratch_rdata_o =
+        scratch_cpu_rdata;
+
+    assign scratch_sel_o =
+        mem_valid_i && scratch_hit && (mem_we_i == 4'b0000);
 
     assign irq_o =
         irq_enable_q && done_pending_q;
@@ -318,6 +334,10 @@ module nn_accel_periph #(
                     mem_rdata_o = best_score_q;
                 end
 
+                REG_CYCLE_COUNT: begin
+                    mem_rdata_o = cycle_count_q;
+                end
+
                 default: begin
                     mem_rdata_o = 32'b0;
                 end
@@ -343,6 +363,7 @@ module nn_accel_periph #(
             best_score_q          <= 32'sd0;
             best_index_q          <= 16'd0;
             best_valid_q          <= 1'b0;
+            cycle_count_q         <= 32'd0;
             dense_rsp_valid_q     <= 1'b0;
             dense_rsp_error_q     <= 1'b0;
             dense_rd_pending_q    <= 1'b0;
@@ -350,6 +371,12 @@ module nn_accel_periph #(
             dense_rd_addr_q       <= '0;
         end else begin
             start_pulse_q <= 1'b0;
+
+            // Inference latency counter: cleared on start, counts while the
+            // dense engine is busy, then holds until the next start.
+            if (start_pulse_q || dense_busy) begin
+                cycle_count_q <= cycle_count_q + 32'd1;
+            end
 
             if (dense_rsp_valid_q && dense_mem_rsp_ready) begin
                 dense_rsp_valid_q <= 1'b0;
@@ -379,6 +406,7 @@ module nn_accel_periph #(
                             best_score_q    <= 32'sd0;
                             best_index_q    <= 16'd0;
                             best_valid_q    <= 1'b0;
+                            cycle_count_q   <= 32'd0;
                         end
 
                         if (mem_wdata_i[1]) begin
