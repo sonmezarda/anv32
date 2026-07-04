@@ -55,6 +55,8 @@ def main():
         "-fdata-sections",
         "-ffunction-sections",
         "-msmall-data-limit=0",
+        "-I",
+        "sw/include",
     ]
 
     run([args.cc, *common_flags, "-S", str(src), "-o", str(c_asm)])

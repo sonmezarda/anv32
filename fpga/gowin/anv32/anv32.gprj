@@ -26,6 +26,12 @@
         <File path="../../../rtl/core/anv32im1/anv32im1_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_config_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_isa_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_soc_addr_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_sysctrl_regs_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_gpio_regs_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_uart_regs_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_i2c_regs_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_nn_regs_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32_soc_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32i1_soc_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32im1_soc_top.sv" type="file.verilog" enable="1"/>

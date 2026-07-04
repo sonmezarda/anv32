@@ -81,7 +81,13 @@ ASM_HARD_TESTS ?= \
 
 COMMON_PKGS := \
 	rtl/include/anv32_config_pkg.sv \
-	rtl/include/anv32_isa_pkg.sv
+	rtl/include/anv32_isa_pkg.sv \
+	rtl/include/anv32_soc_addr_pkg.sv \
+	rtl/include/anv32_sysctrl_regs_pkg.sv \
+	rtl/include/anv32_gpio_regs_pkg.sv \
+	rtl/include/anv32_uart_regs_pkg.sv \
+	rtl/include/anv32_i2c_regs_pkg.sv \
+	rtl/include/anv32_nn_regs_pkg.sv
 
 # ---------------------------------------------------------------------------
 # Byte-lane hex generation
