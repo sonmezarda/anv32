@@ -1,0 +1,30 @@
+#ifndef ANV32_I2C_H
+#define ANV32_I2C_H
+
+#include "anv32_mmio.h"
+
+#define ANV32_I2C_CMD_OFFSET            0x000u
+#define ANV32_I2C_STATUS_OFFSET         0x004u
+#define ANV32_I2C_RXDATA_OFFSET         0x008u
+#define ANV32_I2C_CTRL_OFFSET           0x00Cu
+#define ANV32_I2C_SCL_LOW_OFFSET        0x010u
+#define ANV32_I2C_SCL_HIGH_OFFSET       0x014u
+#define ANV32_I2C_TIMEOUT_OFFSET        0x018u
+
+#define ANV32_I2C_CMD(base)             ANV32_REG32((base) + ANV32_I2C_CMD_OFFSET)
+#define ANV32_I2C_STATUS(base)          ANV32_REG32((base) + ANV32_I2C_STATUS_OFFSET)
+#define ANV32_I2C_RXDATA(base)          ANV32_REG32((base) + ANV32_I2C_RXDATA_OFFSET)
+#define ANV32_I2C_CTRL(base)            ANV32_REG32((base) + ANV32_I2C_CTRL_OFFSET)
+#define ANV32_I2C_SCL_LOW(base)         ANV32_REG32((base) + ANV32_I2C_SCL_LOW_OFFSET)
+#define ANV32_I2C_SCL_HIGH(base)        ANV32_REG32((base) + ANV32_I2C_SCL_HIGH_OFFSET)
+#define ANV32_I2C_TIMEOUT(base)         ANV32_REG32((base) + ANV32_I2C_TIMEOUT_OFFSET)
+
+#define ANV32_I2C0_CMD                  ANV32_I2C_CMD(ANV32_I2C0_BASE)
+#define ANV32_I2C0_STATUS               ANV32_I2C_STATUS(ANV32_I2C0_BASE)
+#define ANV32_I2C0_RXDATA               ANV32_I2C_RXDATA(ANV32_I2C0_BASE)
+#define ANV32_I2C0_CTRL                 ANV32_I2C_CTRL(ANV32_I2C0_BASE)
+#define ANV32_I2C0_SCL_LOW              ANV32_I2C_SCL_LOW(ANV32_I2C0_BASE)
+#define ANV32_I2C0_SCL_HIGH             ANV32_I2C_SCL_HIGH(ANV32_I2C0_BASE)
+#define ANV32_I2C0_TIMEOUT              ANV32_I2C_TIMEOUT(ANV32_I2C0_BASE)
+
+#endif

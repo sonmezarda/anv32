@@ -1,0 +1,33 @@
+#ifndef ANV32_UART_H
+#define ANV32_UART_H
+
+#include "anv32_mmio.h"
+
+#define ANV32_UART_TXDATA_OFFSET        0x000u
+#define ANV32_UART_STATUS_OFFSET        0x004u
+#define ANV32_UART_BAUD_OFFSET          0x008u
+#define ANV32_UART_ERROR_OFFSET         0x00Cu
+#define ANV32_UART_RXDATA_OFFSET        0x010u
+
+#define ANV32_UART_STATUS_TX_READY      (1u << 0)
+#define ANV32_UART_STATUS_TX_EMPTY      (1u << 1)
+#define ANV32_UART_STATUS_TX_BUSY       (1u << 2)
+#define ANV32_UART_STATUS_TX_DONE       (1u << 3)
+#define ANV32_UART_STATUS_RX_VALID      (1u << 4)
+#define ANV32_UART_STATUS_RX_EMPTY      (1u << 5)
+#define ANV32_UART_STATUS_RX_FULL       (1u << 6)
+#define ANV32_UART_STATUS_RX_BUSY       (1u << 7)
+
+#define ANV32_UART_TXDATA(base)         ANV32_REG32((base) + ANV32_UART_TXDATA_OFFSET)
+#define ANV32_UART_STATUS(base)         ANV32_REG32((base) + ANV32_UART_STATUS_OFFSET)
+#define ANV32_UART_BAUD(base)           ANV32_REG32((base) + ANV32_UART_BAUD_OFFSET)
+#define ANV32_UART_ERROR(base)          ANV32_REG32((base) + ANV32_UART_ERROR_OFFSET)
+#define ANV32_UART_RXDATA(base)         ANV32_REG32((base) + ANV32_UART_RXDATA_OFFSET)
+
+#define ANV32_UART0_TXDATA              ANV32_UART_TXDATA(ANV32_UART0_BASE)
+#define ANV32_UART0_STATUS              ANV32_UART_STATUS(ANV32_UART0_BASE)
+#define ANV32_UART0_BAUD                ANV32_UART_BAUD(ANV32_UART0_BASE)
+#define ANV32_UART0_ERROR               ANV32_UART_ERROR(ANV32_UART0_BASE)
+#define ANV32_UART0_RXDATA              ANV32_UART_RXDATA(ANV32_UART0_BASE)
+
+#endif

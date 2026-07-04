@@ -72,22 +72,16 @@ Compatibility wrappers are provided:
 
 The Gowin FPGA project currently targets the `anv32im2` SoC wrapper.
 
-## MMIO Map
+## Memory Map
 
-Current FPGA MMIO map:
-
-| Address | Function |
-| --- | --- |
-| `0x1000_0000` | Debug LEDs |
-| `0x1000_0010` | GPIO IRQ pending / clear |
-| `0x1000_1000` | UART TX data |
-| `0x1000_1004` | UART status |
-| `0x1000_1008` | UART baud rate |
-| `0x1000_100C` | UART error flags / clear |
-| `0x1000_2000` | I2C command |
-| `0x1000_2004` | I2C status |
-| `0x1000_2008` | I2C RX data |
-| `0x1000_200C` | I2C control |
+The stable target SoC memory map is recorded in
+[`docs/memory_map.md`](docs/memory_map.md). New software should use
+[`sw/include/anv32_mmio.h`](sw/include/anv32_mmio.h), and RTL should use
+[`rtl/include/anv32_soc_addr_pkg.sv`](rtl/include/anv32_soc_addr_pkg.sv) as
+the shared source of base address constants while the direct-decode SoC top is
+migrated. Peripheral register layouts are split into focused headers such as
+`sw/include/anv32_uart.h` and packages such as
+`rtl/include/anv32_uart_regs_pkg.sv`.
 
 MMIO accesses are gated with `mem_valid`, and writes commit only when
 `mem_ready` is high. In the current SoC, `mem_ready` is tied high, but the core

@@ -1,0 +1,56 @@
+#ifndef ANV32_NN_H
+#define ANV32_NN_H
+
+#include "anv32_mmio.h"
+
+#define ANV32_NN_CONTROL_OFFSET              0x000u
+#define ANV32_NN_STATUS_OFFSET               0x004u
+#define ANV32_NN_INPUT_BASE_OFFSET           0x008u
+#define ANV32_NN_WEIGHT_BASE_OFFSET          0x00Cu
+#define ANV32_NN_BIAS_BASE_OFFSET            0x010u
+#define ANV32_NN_OUTPUT_BASE_OFFSET          0x014u
+#define ANV32_NN_INPUT_LEN_WORDS_OFFSET      0x018u
+#define ANV32_NN_OUTPUT_COUNT_OFFSET         0x01Cu
+#define ANV32_NN_CONFIG_OFFSET               0x020u
+#define ANV32_NN_RESULT_ARGMAX_OFFSET        0x024u
+#define ANV32_NN_BEST_SCORE_OFFSET           0x028u
+#define ANV32_NN_CYCLE_COUNT_OFFSET          0x02Cu
+
+#define ANV32_NN_STATUS_BUSY                 (1u << 0)
+#define ANV32_NN_STATUS_DONE                 (1u << 1)
+#define ANV32_NN_STATUS_ERROR                (1u << 2)
+#define ANV32_NN_STATUS_IRQ_ENABLE           (1u << 3)
+#define ANV32_NN_STATUS_BEST_VALID           (1u << 4)
+
+#define ANV32_NN_CONTROL_START               (1u << 0)
+#define ANV32_NN_CONTROL_CLEAR               (1u << 1)
+
+#define ANV32_NN_REG(base, offset)           ANV32_REG32((base) + (offset))
+
+#define ANV32_NN_CONTROL_REG(base)           ANV32_NN_REG((base), ANV32_NN_CONTROL_OFFSET)
+#define ANV32_NN_STATUS_REG(base)            ANV32_NN_REG((base), ANV32_NN_STATUS_OFFSET)
+#define ANV32_NN_INPUT_BASE_REG(base)        ANV32_NN_REG((base), ANV32_NN_INPUT_BASE_OFFSET)
+#define ANV32_NN_WEIGHT_BASE_REG(base)       ANV32_NN_REG((base), ANV32_NN_WEIGHT_BASE_OFFSET)
+#define ANV32_NN_BIAS_BASE_REG(base)         ANV32_NN_REG((base), ANV32_NN_BIAS_BASE_OFFSET)
+#define ANV32_NN_OUTPUT_BASE_REG(base)       ANV32_NN_REG((base), ANV32_NN_OUTPUT_BASE_OFFSET)
+#define ANV32_NN_INPUT_LEN_WORDS_REG(base)   ANV32_NN_REG((base), ANV32_NN_INPUT_LEN_WORDS_OFFSET)
+#define ANV32_NN_OUTPUT_COUNT_REG(base)      ANV32_NN_REG((base), ANV32_NN_OUTPUT_COUNT_OFFSET)
+#define ANV32_NN_CONFIG_REG(base)            ANV32_NN_REG((base), ANV32_NN_CONFIG_OFFSET)
+#define ANV32_NN_RESULT_ARGMAX_REG(base)     ANV32_NN_REG((base), ANV32_NN_RESULT_ARGMAX_OFFSET)
+#define ANV32_NN_BEST_SCORE_REG(base)        ANV32_NN_REG((base), ANV32_NN_BEST_SCORE_OFFSET)
+#define ANV32_NN_CYCLE_COUNT_REG(base)       ANV32_NN_REG((base), ANV32_NN_CYCLE_COUNT_OFFSET)
+
+#define ANV32_NN_CONTROL                     ANV32_NN_CONTROL_REG(ANV32_NN_BASE)
+#define ANV32_NN_STATUS                      ANV32_NN_STATUS_REG(ANV32_NN_BASE)
+#define ANV32_NN_INPUT_BASE                  ANV32_NN_INPUT_BASE_REG(ANV32_NN_BASE)
+#define ANV32_NN_WEIGHT_BASE                 ANV32_NN_WEIGHT_BASE_REG(ANV32_NN_BASE)
+#define ANV32_NN_BIAS_BASE                   ANV32_NN_BIAS_BASE_REG(ANV32_NN_BASE)
+#define ANV32_NN_OUTPUT_BASE                 ANV32_NN_OUTPUT_BASE_REG(ANV32_NN_BASE)
+#define ANV32_NN_INPUT_LEN_WORDS             ANV32_NN_INPUT_LEN_WORDS_REG(ANV32_NN_BASE)
+#define ANV32_NN_OUTPUT_COUNT                ANV32_NN_OUTPUT_COUNT_REG(ANV32_NN_BASE)
+#define ANV32_NN_CONFIG                      ANV32_NN_CONFIG_REG(ANV32_NN_BASE)
+#define ANV32_NN_RESULT_ARGMAX               ANV32_NN_RESULT_ARGMAX_REG(ANV32_NN_BASE)
+#define ANV32_NN_BEST_SCORE                  ANV32_NN_BEST_SCORE_REG(ANV32_NN_BASE)
+#define ANV32_NN_CYCLE_COUNT                 ANV32_NN_CYCLE_COUNT_REG(ANV32_NN_BASE)
+
+#endif
