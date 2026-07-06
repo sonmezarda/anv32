@@ -1,4 +1,10 @@
-module anv32_soc_top #(
+module anv32_soc_top
+    import anv32_soc_addr_pkg::*;
+    import anv32_sysctrl_regs_pkg::*;
+    import anv32_gpio_regs_pkg::*;
+    import anv32_uart_regs_pkg::*;
+    import anv32_i2c_regs_pkg::*;
+#(
     parameter int unsigned CORE_TYPE   = 2,
     parameter int unsigned BRAM_ADDR_W = 10,
     parameter int unsigned POR_CYCLES  = 8,
@@ -17,15 +23,15 @@ module anv32_soc_top #(
     localparam int unsigned CORE_ANV32IM1 = 1;
     localparam int unsigned CORE_ANV32IM2 = 2;
 
-    localparam logic [31:0] LED_ADDR              = 32'h1000_0000;
-    localparam logic [31:0] GPIO_IRQ_PENDING_ADDR = 32'h1000_0010;
-    localparam logic [31:0] UART_TXDATA_ADDR      = 32'h1000_1000;
-    localparam logic [31:0] UART_STATUS_ADDR      = 32'h1000_1004;
-    localparam logic [31:0] UART_BAUD_ADDR        = 32'h1000_1008;
-    localparam logic [31:0] UART_ERROR_ADDR       = 32'h1000_100C;
-    localparam logic [31:0] UART_RXDATA_ADDR      = 32'h1000_1010;
-    localparam logic [31:0] I2C_BASE_ADDR         = 32'h1000_2000;
-    localparam logic [31:0] NN_ACCEL_BASE_ADDR    = 32'h1000_3000;
+    localparam logic [31:0] LED_ADDR              = SYSCTRL_BASE + SYSCTRL_LED_OFFSET;
+    localparam logic [31:0] GPIO_IRQ_PENDING_ADDR = GPIO0_BASE + GPIO_IRQ_PENDING_OFFSET;
+    localparam logic [31:0] UART_TXDATA_ADDR      = UART0_BASE + UART_TXDATA_OFFSET;
+    localparam logic [31:0] UART_STATUS_ADDR      = UART0_BASE + UART_STATUS_OFFSET;
+    localparam logic [31:0] UART_BAUD_ADDR        = UART0_BASE + UART_BAUD_OFFSET;
+    localparam logic [31:0] UART_ERROR_ADDR       = UART0_BASE + UART_ERROR_OFFSET;
+    localparam logic [31:0] UART_RXDATA_ADDR      = UART0_BASE + UART_RXDATA_OFFSET;
+    localparam logic [31:0] I2C_BASE_ADDR         = I2C0_BASE;
+    localparam logic [31:0] NN_ACCEL_BASE_ADDR    = NN_BASE;
 
     logic rst_i;
     logic [POR_CYCLES-1:0] por_shift = '0;

@@ -1,4 +1,4 @@
-#define LED_MMIO (*(volatile unsigned int *)0x10000000u)
+#include "anv32_sysctrl.h"
 
 volatile unsigned int trap_flags;
 
@@ -28,9 +28,9 @@ static void delay(unsigned int count)
 static void blink_pass(void)
 {
     for (;;) {
-        LED_MMIO = 0x0a;
+        ANV32_SYSCTRL_LED = 0x0a;
         delay(400000u);
-        LED_MMIO = 0x05;
+        ANV32_SYSCTRL_LED = 0x05;
         delay(400000u);
     }
 }
@@ -38,7 +38,7 @@ static void blink_pass(void)
 static void show_fail(unsigned int code)
 {
     for (;;) {
-        LED_MMIO = code;
+        ANV32_SYSCTRL_LED = code;
     }
 }
 

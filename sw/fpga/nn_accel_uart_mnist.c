@@ -1,34 +1,6 @@
-#define LED_MMIO             (*(volatile unsigned int *)0x10000000u)
-
-#define UART_TXDATA_MMIO     (*(volatile unsigned int *)0x10001000u)
-#define UART_STATUS_MMIO     (*(volatile unsigned int *)0x10001004u)
-#define UART_BAUD_MMIO       (*(volatile unsigned int *)0x10001008u)
-#define UART_ERROR_MMIO      (*(volatile unsigned int *)0x1000100Cu)
-#define UART_RXDATA_MMIO     (*(volatile unsigned int *)0x10001010u)
-
-#define UART_STATUS_TX_READY (1u << 0)
-#define UART_STATUS_RX_VALID (1u << 4)
-
-#define NN_BASE              0x10003000u
-#define NN_SCRATCH_BASE      (NN_BASE + 0x1000u)
-
-#define NN_CONTROL           (*(volatile unsigned int *)(NN_BASE + 0x00u))
-#define NN_STATUS            (*(volatile unsigned int *)(NN_BASE + 0x04u))
-#define NN_INPUT_BASE        (*(volatile unsigned int *)(NN_BASE + 0x08u))
-#define NN_WEIGHT_BASE       (*(volatile unsigned int *)(NN_BASE + 0x0Cu))
-#define NN_BIAS_BASE         (*(volatile unsigned int *)(NN_BASE + 0x10u))
-#define NN_OUTPUT_BASE       (*(volatile unsigned int *)(NN_BASE + 0x14u))
-#define NN_INPUT_LEN_WORDS   (*(volatile unsigned int *)(NN_BASE + 0x18u))
-#define NN_OUTPUT_COUNT      (*(volatile unsigned int *)(NN_BASE + 0x1Cu))
-#define NN_CONFIG            (*(volatile unsigned int *)(NN_BASE + 0x20u))
-#define NN_RESULT_ARGMAX     (*(volatile unsigned int *)(NN_BASE + 0x24u))
-#define NN_BEST_SCORE        (*(volatile unsigned int *)(NN_BASE + 0x28u))
-#define NN_CYCLE_COUNT       (*(volatile unsigned int *)(NN_BASE + 0x2Cu))
-
-#define NN_STATUS_DONE       (1u << 1)
-#define NN_STATUS_ERROR      (1u << 2)
-#define NN_CONTROL_START     (1u << 0)
-#define NN_CONTROL_CLEAR     (1u << 1)
+#include "anv32_nn.h"
+#include "anv32_sysctrl.h"
+#include "anv32_uart.h"
 
 #define INPUT_WORDS          196u
 #define OUTPUTS              10u
@@ -53,14 +25,14 @@
 #define ERR_NO_MODEL         5u
 
 static volatile unsigned int *const nn_scratch =
-    (volatile unsigned int *)NN_SCRATCH_BASE;
+    (volatile unsigned int *)ANV32_NN_SCRATCH_BASE;
 
 static void uart_putc(unsigned int c)
 {
-    while ((UART_STATUS_MMIO & UART_STATUS_TX_READY) == 0u) {
+    while ((ANV32_UART0_STATUS & ANV32_UART_STATUS_TX_READY) == 0u) {
     }
 
-    UART_TXDATA_MMIO = c & 0xFFu;
+    ANV32_UART0_TXDATA = c & 0xFFu;
 }
 
 static void uart_puts(const char *s)
@@ -73,10 +45,10 @@ static void uart_puts(const char *s)
 
 static unsigned int uart_getc(void)
 {
-    while ((UART_STATUS_MMIO & UART_STATUS_RX_VALID) == 0u) {
+    while ((ANV32_UART0_STATUS & ANV32_UART_STATUS_RX_VALID) == 0u) {
     }
 
-    return UART_RXDATA_MMIO & 0xFFu;
+    return ANV32_UART0_RXDATA & 0xFFu;
 }
 
 static void put_u16_le(unsigned int value)
@@ -188,9 +160,9 @@ static void send_response(unsigned int status)
     unsigned int accel_cycles = 0u;
 
     if (status == ERR_OK) {
-        pred = NN_RESULT_ARGMAX & 0xFFu;
-        best_score = NN_BEST_SCORE;
-        accel_cycles = NN_CYCLE_COUNT;
+        pred = ANV32_NN_RESULT_ARGMAX & 0xFFu;
+        best_score = ANV32_NN_BEST_SCORE;
+        accel_cycles = ANV32_NN_CYCLE_COUNT;
     }
 
     uart_putc('N');
@@ -214,21 +186,22 @@ static void send_response(unsigned int status)
 
 static unsigned int run_accelerator(void)
 {
-    NN_INPUT_BASE = INPUT_WORD_BASE * 4u;
-    NN_WEIGHT_BASE = WEIGHT_WORD_BASE * 4u;
-    NN_BIAS_BASE = BIAS_WORD_BASE * 4u;
-    NN_OUTPUT_BASE = OUTPUT_WORD_BASE * 4u;
-    NN_INPUT_LEN_WORDS = INPUT_WORDS;
-    NN_OUTPUT_COUNT = OUTPUTS;
-    NN_CONFIG = 0u;
+    ANV32_NN_INPUT_BASE = INPUT_WORD_BASE * 4u;
+    ANV32_NN_WEIGHT_BASE = WEIGHT_WORD_BASE * 4u;
+    ANV32_NN_BIAS_BASE = BIAS_WORD_BASE * 4u;
+    ANV32_NN_OUTPUT_BASE = OUTPUT_WORD_BASE * 4u;
+    ANV32_NN_INPUT_LEN_WORDS = INPUT_WORDS;
+    ANV32_NN_OUTPUT_COUNT = OUTPUTS;
+    ANV32_NN_CONFIG = 0u;
 
-    NN_CONTROL = NN_CONTROL_CLEAR;
-    NN_CONTROL = NN_CONTROL_START;
+    ANV32_NN_CONTROL = ANV32_NN_CONTROL_CLEAR;
+    ANV32_NN_CONTROL = ANV32_NN_CONTROL_START;
 
-    while ((NN_STATUS & (NN_STATUS_DONE | NN_STATUS_ERROR)) == 0u) {
+    while ((ANV32_NN_STATUS &
+            (ANV32_NN_STATUS_DONE | ANV32_NN_STATUS_ERROR)) == 0u) {
     }
 
-    if ((NN_STATUS & NN_STATUS_ERROR) != 0u) {
+    if ((ANV32_NN_STATUS & ANV32_NN_STATUS_ERROR) != 0u) {
         return ERR_ACCEL;
     }
 
@@ -241,9 +214,9 @@ int main(void)
     unsigned int status;
     unsigned int model_loaded = 0u;
 
-    UART_BAUD_MMIO = 115200u;
-    UART_ERROR_MMIO = 1u;
-    LED_MMIO = 0x1u;
+    ANV32_UART0_BAUD = 115200u;
+    ANV32_UART0_ERROR = 1u;
+    ANV32_SYSCTRL_LED = 0x1u;
     uart_puts("ANV32_NN_UART_READY\n");
 
     for (;;) {
@@ -254,9 +227,9 @@ int main(void)
 
             if (status == ERR_OK) {
                 model_loaded = 1u;
-                LED_MMIO = 0x2u;
+                ANV32_SYSCTRL_LED = 0x2u;
             } else {
-                LED_MMIO = 0xEu;
+                ANV32_SYSCTRL_LED = 0xEu;
             }
 
             send_model_ack(status);
@@ -268,14 +241,14 @@ int main(void)
             }
 
             if (status == ERR_OK) {
-                LED_MMIO = 0x4u;
+                ANV32_SYSCTRL_LED = 0x4u;
                 status = run_accelerator();
             }
 
             if (status == ERR_OK) {
-                LED_MMIO = NN_RESULT_ARGMAX & 0xFu;
+                ANV32_SYSCTRL_LED = ANV32_NN_RESULT_ARGMAX & 0xFu;
             } else {
-                LED_MMIO = 0xEu;
+                ANV32_SYSCTRL_LED = 0xEu;
             }
 
             send_response(status);

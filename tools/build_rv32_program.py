@@ -12,6 +12,11 @@ def run(cmd, stdout=None):
     subprocess.run(cmd, check=True, stdout=stdout)
 
 
+def object_name_for(path: Path) -> str:
+    stem = "_".join(path.with_suffix("").parts)
+    return f"{stem}.o"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--src", required=True, help="C source file")
@@ -28,6 +33,7 @@ def main():
     parser.add_argument("--split-hex", default="tools/split_hex.py")
     parser.add_argument("--python", default="python3")
     parser.add_argument("--opt", default="-Os")
+    parser.add_argument("--lib-dir", default="sw/fpga/lib")
     args = parser.parse_args()
 
     src = Path(args.src)
@@ -38,6 +44,7 @@ def main():
     c_asm = base.with_suffix(".s")
     c_obj = out_dir / f"{args.name}.o"
     crt_obj = out_dir / "crt0.o"
+    lib_dir = Path(args.lib_dir)
     elf = base.with_suffix(".elf")
     binary = base.with_suffix(".bin")
     word_hex = base.with_suffix(".hex")
@@ -55,10 +62,23 @@ def main():
         "-fdata-sections",
         "-ffunction-sections",
         "-msmall-data-limit=0",
+        "-I",
+        "sw/include",
+        "-I",
+        "sw/fpga",
     ]
+
+    lib_sources = []
+    if lib_dir.is_dir():
+        lib_sources = sorted(
+            path for path in lib_dir.glob("*.c") if path.resolve() != src.resolve()
+        )
+    lib_objects = [out_dir / object_name_for(path) for path in lib_sources]
 
     run([args.cc, *common_flags, "-S", str(src), "-o", str(c_asm)])
     run([args.cc, *common_flags, "-c", str(c_asm), "-o", str(c_obj)])
+    for lib_src, lib_obj in zip(lib_sources, lib_objects):
+        run([args.cc, *common_flags, "-c", str(lib_src), "-o", str(lib_obj)])
     run([args.cc, *common_flags, "-c", args.crt0, "-o", str(crt_obj)])
     run([
         args.cc,
@@ -67,6 +87,7 @@ def main():
         "-nostartfiles",
         str(crt_obj),
         str(c_obj),
+        *[str(obj) for obj in lib_objects],
         "-T",
         args.linker,
         "-Wl,--no-relax",

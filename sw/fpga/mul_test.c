@@ -1,4 +1,4 @@
-#define LED_MMIO (*(volatile unsigned int *)0x10000000u)
+#include "anv32_sysctrl.h"
 
 unsigned int true_val  = 0b0101;
 unsigned int false_val = 0b1100;
@@ -37,11 +37,11 @@ int main(void)
 
 
 void set_true(){
-    LED_MMIO = true_val;
+    ANV32_SYSCTRL_LED = true_val;
 }
 
 void set_false(){
-    LED_MMIO = false_val;
+    ANV32_SYSCTRL_LED = false_val;
     stop();
 }
 

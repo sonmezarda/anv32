@@ -1,5 +1,5 @@
 module nn_accel_periph #(
-    parameter logic [31:0] BASE_ADDR       = 32'h1000_3000,
+    parameter logic [31:0] BASE_ADDR       = 32'h1001_0000,
     parameter logic [31:0] SCRATCH_OFFSET  = 32'h0000_1000,
     parameter int unsigned SCRATCH_WORDS   = 4096,
     parameter int unsigned SCRATCH_ADDR_W  = $clog2(SCRATCH_WORDS)
