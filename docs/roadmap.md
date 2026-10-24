@@ -1,53 +1,75 @@
-# Yol Haritası
+# Roadmap
 
-## anv32i1 Kapanış Notu
+anv32 is still under active development. This page lists what is done and
+what comes next.
 
-Tarih: 2026-06-21
+## Where things stand
 
-anv32i1 hedefi basit, anlaşılır ve Gowin FPGA üzerinde 27 MHz üstünde kalan bir RV32I MCU core olması. CSR, exception ve tek external interrupt desteği eklendikten sonra timing 27 MHz sınırına çok yaklaştı. Son ölçüm yaklaşık 27.069 MHz; bu yüzden anv32i1'e büyük özellik eklemek yerine minimum doğruluk ve test işleriyle kapatmak daha doğru.
+- `anv32i1`, `anv32im1` and `anv32im2` pass the unit tests, the core/SoC
+  test suites, every benchmark self-check, riscv-tests (rv32ui, rv32um,
+  rv32mi) and riscv-arch-test (I, M, privilege) compared against Spike.
+  Skipped tests need Zifencei, misaligned access in hardware, Sdtrig or PMP
+  entries.
+- UART and I2C (16x2 LCD, QMC5883L magnetometer) have been tested on a Tang
+  Nano 9K. The MNIST demo drives the NN accelerator from a host over UART.
 
-anv32i1 tarafında ileride eklenebilecek küçük işler:
+## anv32i1 is frozen
 
-- Misaligned load/store exception.
-- Instruction address misaligned exception.
-- CSR erişim doğruluğu: unsupported CSR access için illegal instruction, yazılabilir bit maskeleri, WARL davranışlarını sade de olsa toparlama.
-- Trap ve interrupt için simülasyon testleri: `ECALL`, illegal instruction, external IRQ, `MRET`.
-- GPIO interrupt pending/clear modelini dokümante etmek.
+`anv32i1` is meant to stay a simple RV32I reference core above 27 MHz on the
+GW1NR-9. After CSRs, exceptions and the external interrupt were added, it
+closed at about 27.07 MHz. Bigger features would break that budget, so they
+go into the `im` cores instead.
 
-anv32i1'e eklememeyi tercih edeceğimiz daha büyük işler:
+Out of scope for `anv32i1`: M extension, vectored or multi-source interrupts,
+nested interrupts, a debug module, accelerator interfaces.
 
-- Multiply/divide veya daha geniş execute logic.
-- Vectored interrupt veya çok kaynaklı interrupt controller.
-- Nested interrupt desteği.
-- Gerçek debug module / breakpoint altyapısı.
-- Hızlandırıcı arayüzleri.
+## Core
 
-Bu işler gerekirse `anv32i2` veya ayrı bir debug/peripheral çalışmasının konusu olsun. anv32i1 için ana kural: anlaşılır kal, timing'i 27 MHz altında bırakma.
+- A superscalar core as the next microarchitecture step after `anv32im2`
+- A Linux-capable core: S and U modes, Sv32 MMU, the A extension, and the
+  timer/interrupt support Linux expects
+- `FENCE.I` (Zifencei)
+- Access-fault traps on bus errors
+- `mtvec` vectored mode and a timer interrupt (CLINT-style `mtime`/`mtimecmp`)
+- Trigger CSRs (Sdtrig) and a debug module
+- Spike diff support for `anv32im2` (the trace flow currently runs `anv32im1`)
 
-## I2C Peripheral Notları
+## SoC
 
-Tarih: 2026-06-28, güncelleme: 2026-06-29
+- A small valid/ready peripheral bus, with BRAM, UART, I2C, GPIO and the NN
+  accelerator behind slave wrappers instead of direct decode in the SoC top
+- Bus errors reported back to the core as access faults
+- GPIO, SPI, timer, PWM, watchdog and a second UART. The address slots and,
+  for GPIO and SYSCTRL, the register layouts are already defined; see
+  [memory_map.md](memory_map.md#register-status).
+- SYSCTRL board ID / build ID / status registers
+- DMA / stream engine for the NN accelerator
 
-I2C çekirdeği önce temel master transmit tarafıyla başladı. Tang Nano 9K üzerinde 2x16 I2C LCD backpack ile ACK alındı ve `ANV32 I2C OK` yazısı başarıyla gösterildi. Sonra timed byte engine, clock stretching bekleme, read byte, repeated START ve QMC5883L manyetometre register read/write akışları eklendi. QMC5883L üzerinden gerçek XYZ verisi okunarak write/read tarafı donanımda doğrulandı.
+## NN accelerator
 
-Mevcut durumda olanlar:
+The current block is a first experiment: one int8 dense layer at a time, with
+optional ReLU and argmax, fed from its own scratch memory. Next:
 
-- `i2c_byte_master_timed`: START, repeated START, byte transmit, ACK okuma, byte receive, master ACK/NACK ve STOP üretiyor.
-- SCL release edildikten sonra gerçek `scl_i` high olana kadar bekleyerek clock stretching destekliyor.
-- Stretch timeout ve transmit arbitration-lost algılama var.
-- `i2c_cmd_master_timed`: byte engine üstünde command queue, RX FIFO, bus busy/free check, bus recovery ve sticky error bitleri sağlıyor.
-- `i2c_periph`: SoC tarafına `CMD`, `STATUS`, `RXDATA`, `CTRL` register map'iyle bağlanıyor.
-- Eski senaryo helper modülleri (`write`, `read`, `reg_read`, LCD/probe test top'ları) ayıklandı; bu akışlar artık yazılımdan command queue'ya komut dizerek yapılacak.
-- `sw/fpga/i2c_qmc5883l.c`: command queue tabanlı QMC5883L smoke test programı.
+- More layer types and multi-layer networks without CPU work between layers
+- DMA / stream engine to move data without the CPU
+- Higher throughput (more lanes, overlapping fetch and compute)
+- Interrupt-driven use in the demos instead of polling
 
-Profesyonel MCU seviyesine yaklaşmak için kalan işler:
+## I2C
 
-- Daha esnek timing register'ları: `SCL_LOW`, `SCL_HIGH`, `STRETCH_TIMEOUT` değerlerini MMIO'dan ayarlanabilir yapmak.
-- Error sonrası politika: NACK/arbitration/timeout durumunda command queue'yu otomatik durdurma veya yazılım kontrollü devam etme seçeneği.
-- Interrupt modeli: RX ready, command done, command empty, error ve recovery done için ayrı IRQ status/enable bitleri.
-- Command queue seviye sayaçları: TX command FIFO level ve RX FIFO level bilgisini status register'a eklemek.
-- Bus recovery geliştirme: recovery sonunda SDA/SCL hâlâ serbest değilse daha net stuck-low sebebi raporlamak.
-- Test kapsamı: command queue overflow, RX overflow, NACK, arbitration lost, clock stretching, recovery ve repeated START için simülasyon testleri.
-- Bus wrapper standardizasyonu: UART/I2C/GPIO/TIMER için ortak peripheral bus protokolüne taşımak.
+The current controller supports START, repeated START, byte TX/RX, ACK/NACK,
+STOP, clock stretching with timeout, arbitration-lost detection, a command
+queue with RX FIFO, bus busy/free checks, bus recovery and sticky error bits.
 
-Önerilen sıradaki teknik adım: I2C register map'i biraz daha MCU benzeri hale getirip timing ve IRQ ayarlarını MMIO'ya taşımak. Ardından ortak peripheral bus tasarımına geçerken bu register modelini UART ile aynı disipline sokmak.
+Next:
+
+- Make `SCL_LOW`, `SCL_HIGH` and `STRETCH_TIMEOUT` runtime registers instead
+  of RTL parameters (their offsets are already reserved)
+- A choice between halting the command queue or continuing after
+  NACK/arbitration loss/timeout
+- Separate IRQ status/enable bits for RX ready, command done, queue empty,
+  error and recovery done
+- FIFO level counters in the status register
+- Better stuck-low reporting when recovery fails
+- Simulation tests for queue/RX overflow, NACK, arbitration loss, clock
+  stretching, recovery and repeated START

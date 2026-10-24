@@ -1,297 +1,233 @@
 # anv32
 
-`anv32` is a learning-focused RV32 microcontroller project written in
-SystemVerilog. The project is intentionally iterative: start with a small RV32I
-core, add ISA features, react to timing pressure with new pipeline revisions,
-then grow the SoC and peripheral subsystem in a more realistic direction.
+[![CI](https://github.com/sonmezarda/anv32/actions/workflows/ci.yml/badge.svg)](https://github.com/sonmezarda/anv32/actions/workflows/ci.yml)
 
-The repository currently contains three in-order RISC-V cores, a Gowin FPGA SoC,
-Verilator-based tests, a bare-metal software flow, working UART and I2C
-peripherals, and early infrastructure for a ready/valid-style data bus.
+A family of RISC-V cores and a small SoC around them, written in
+SystemVerilog. The idea is to build different kinds of cores and
+implementations for different needs, and to compare them on the same SoC,
+tests and benchmarks.
 
-## Current Status
+The main goal is learning: start with a simple RV32I pipeline, add features,
+see what breaks timing, revise the microarchitecture and measure the
+difference. The second goal is to end up with cores that are actually usable
+at MCU level. It follows my earlier 8-bit fully custom CPU, ArniComp.
 
-- `anv32i1`: first RV32I + `Zicsr` core with basic trap/interrupt support.
-- `anv32im1`: RV32IM + `Zicsr`, adding multiply/divide to the earlier pipeline.
-- `anv32im2`: newer RV32IM + `Zicsr` pipeline revision focused on timing and
-  cleaner multi-cycle behavior.
-- FPGA SoC is running on Tang Nano 9K / Gowin.
-- UART TX/RX, programmable baud generation, and FIFO-backed UART integration are
-  working.
-- I2C master is working with real hardware: a 2x16 I2C LCD text test and a
-  QMC5883L magnetometer register read/write smoke test have both run on FPGA.
-- The core data-memory path now has `mem_valid_o` / `mem_ready_i`, and a
-  cycle-level trace test verifies that the pipeline stalls while memory is not
-  ready.
-- A shared peripheral bus/interconnect is the next architectural step; MMIO is
-  still decoded directly in the SoC top today.
+Today there are three in-order cores that share most of their pipeline, an SoC
+with UART, I2C and a first int8 neural-network accelerator, and a
+Verilator-based test and benchmark flow. Most development happens on a Tang
+Nano 9K (Gowin GW1NR-9); the design has also been run on a PYNQ-Z2.
 
-## Core Family
+This is a work in progress. A superscalar core, a Linux-capable core, GPIO,
+SPI, timers, a proper peripheral bus and more are planned; see
+[Status](#status) and the [roadmap](docs/roadmap.md).
 
-| Core | ISA | Notes |
-| --- | --- | --- |
-| `anv32i1` | RV32I + `Zicsr` | First simple core revision |
-| `anv32im1` | RV32IM + `Zicsr` | Adds `M` extension support |
-| `anv32im2` | RV32IM + `Zicsr` | Newer timing-oriented pipeline revision |
+## Cores
 
-The naming scheme is:
+| Core       | ISA                | Pipeline                         |
+| ---------- | ------------------ | -------------------------------- |
+| `anv32i1`  | RV32I + Zicsr      | 5-stage (F D E M W)              |
+| `anv32im1` | RV32IM + Zicsr     | 5-stage, multi-cycle divider     |
+| `anv32im2` | RV32IM + Zicsr     | 6-stage, execute split into E1/E2 |
 
-- `i`, `im`: ISA level
-- trailing number: microarchitecture revision
+The name is `anv32` + ISA letters + microarchitecture revision. All cores share
+the decoder, CSR file, fetch/decode/memory/writeback stages and the hazard unit
+(`rtl/core/common`, `rtl/core/pipe5`); each variant has its own execute stage
+and top level.
 
-## Architecture Snapshot
+```mermaid
+flowchart LR
+    subgraph c1 ["anv32i1 / anv32im1"]
+        direction LR
+        F1[Fetch] --> D1["Decode<br/>regfile, CSR read"] --> E1["Execute<br/>ALU, branch, CSR,<br/>mul/div, traps"] --> M1[Memory] --> W1["Writeback<br/>regfile, CSR write"]
+        M1 -. forward .-> E1
+        W1 -. forward .-> E1
+        E1 -. redirect .-> F1
+    end
+    subgraph c2 ["anv32im2"]
+        direction LR
+        F2[Fetch] --> D2[Decode] --> X1["E1<br/>operand forwarding"] --> X2["E2<br/>execute, traps"] --> M2[Memory] --> W2[Writeback]
+        X2 -. forward .-> X1
+        M2 -. forward .-> X1
+        W2 -. forward .-> X1
+        X2 -. redirect .-> F2
+    end
+```
 
-- ISA coverage: `RV32I`, `RV32IM`, `Zicsr`
-- Privilege level: machine mode only
-- Memory organization: separate instruction and data ports, with a unified
-  address map at the SoC level
-- On-chip memory: synchronous BRAM with byte-lane init files
-- External interrupt path: simple GPIO-backed pending/clear mechanism
-- Data memory handshake: `mem_valid_o`, `mem_ready_i`, `mem_rdata_i`,
-  `mem_wdata_o`, `mem_addr_o`, `mem_we`
-- Current peripheral integration: direct MMIO decode
-- Planned peripheral integration: small reusable valid/ready bus and slave
-  wrappers for UART, I2C, GPIO, timer, SPI, and memory
+Common features:
 
-## SoC Top Levels
+- Machine mode only, with the standard M-mode CSRs (`mstatus`, `misa`, `mie`,
+  `mip`, `mtvec`, `mscratch`, `mepc`, `mcause`, `mtval`, the ID CSRs) and the
+  `mcycle`/`minstret` counters with their `cycle`/`instret` aliases
+- Precise traps for `ECALL`, `EBREAK`, illegal instructions (including bad CSR
+  accesses) and misaligned loads, stores and jump targets; `MRET`; one
+  external interrupt. Writes to `mstatus`/`mie` refetch the following
+  instructions, so interrupt enable changes take effect at the next
+  instruction.
+- Operand forwarding from M and W; load-use hazards stall
+- Separate instruction and data ports into a dual-port BRAM
+- Single-cycle multiplier and a 32-cycle radix-2 divider (`im` cores)
+- `mem_valid`/`mem_ready` handshake on the data port so the pipeline can wait
+  on slow devices (`anv32im2`; the older cores ignore `mem_ready`)
 
-The shared SoC implementation is [`rtl/soc/anv32_soc_top.sv`](rtl/soc/anv32_soc_top.sv).
-It selects the core with `CORE_TYPE`:
+`anv32i1` is frozen. It sits right at 27 MHz on the GW1NR-9 and is kept as the
+simple reference core. New work goes into `anv32im2`, which the FPGA project
+uses by default.
 
-| `CORE_TYPE` | Core |
-| --- | --- |
-| `0` | `anv32i1` |
-| `1` | `anv32im1` |
-| `2` | `anv32im2` |
+CPI on a few of the benchmark programs (`make bench`, `-Os`):
 
-Compatibility wrappers are provided:
+| Benchmark          | `anv32i1` | `anv32im1` | `anv32im2` |
+| ------------------ | --------: | ---------: | ---------: |
+| `c_crc32`          |     1.274 |      1.274 |      1.435 |
+| `c_matrix_mul_4x4` |     1.390 |      1.155 |      1.296 |
+| `c_fir_filter`     |     1.338 |      1.158 |      1.395 |
+| `branch_taken`     |     2.316 |      2.316 |      2.974 |
 
-- [`anv32i1_soc_top`](rtl/soc/anv32i1_soc_top.sv)
-- [`anv32im1_soc_top`](rtl/soc/anv32im1_soc_top.sv)
-- [`anv32im2_soc_top`](rtl/soc/anv32im2_soc_top.sv)
+On `anv32i1`, the matrix and FIR kernels run without `M` and call libgcc for
+multiplication, so they retire many more instructions. See
+[`docs/benchmarks.md`](docs/benchmarks.md).
 
-The Gowin FPGA project currently targets the `anv32im2` SoC wrapper.
+## SoC
 
-## Memory Map
+[`rtl/soc/anv32_soc_top.sv`](rtl/soc/anv32_soc_top.sv) picks the core with
+`CORE_TYPE` (0 = i1, 1 = im1, 2 = im2). The wrappers `anv32{i1,im1,im2}_soc_top`
+fix that parameter for the Gowin project.
 
-The stable target SoC memory map is recorded in
-[`docs/memory_map.md`](docs/memory_map.md). New software should use
-[`sw/include/anv32_mmio.h`](sw/include/anv32_mmio.h), and RTL should use
-[`rtl/include/anv32_soc_addr_pkg.sv`](rtl/include/anv32_soc_addr_pkg.sv) as
-the shared source of base address constants while the direct-decode SoC top is
-migrated. Peripheral register layouts are split into focused headers such as
-`sw/include/anv32_uart.h` and packages such as
-`rtl/include/anv32_uart_regs_pkg.sv`.
+```mermaid
+flowchart LR
+    core["Core<br/>anv32i1 / im1 / im2"]
+    bram["Dual-port BRAM<br/>4 KiB code + data"]
+    dec["Address decode"]
+    uart["UART0<br/>TX/RX FIFOs"]
+    i2c["I2C0<br/>command queue"]
+    nn["NN accelerator<br/>16 KiB scratch"]
+    sys["SYSCTRL<br/>LEDs"]
+    gpio["GPIO0<br/>IRQ latch"]
 
-MMIO accesses are gated with `mem_valid`, and writes commit only when
-`mem_ready` is high. In the current SoC, `mem_ready` is tied high, but the core
-and tests already support wait states.
+    core -- "instruction port" --> bram
+    core -- "data port<br/>valid/ready" --> dec
+    dec --> bram
+    dec --> uart
+    dec --> i2c
+    dec --> nn
+    dec --> sys
+    dec --> gpio
+    gpio -. "external IRQ" .-> core
+    nn -. "IRQ" .-> core
+```
 
-## UART
+- 4 KiB of on-chip BRAM for code and data, initialized from byte-lane hex files
+- UART with programmable baud rate and 16-entry TX/RX FIFOs
+- I2C master with a command queue, repeated START, clock stretching, timeout,
+  arbitration-lost detection and bus recovery. Tested on hardware with a 16x2
+  LCD backpack and a QMC5883L magnetometer.
+- NN accelerator (first version): an int8 dense-layer engine built on a
+  4-lane dot-product unit, with 16 KiB of scratch memory, argmax and a cycle
+  counter
+- GPIO interrupt input with a pending/clear register (the rest of GPIO is
+  planned)
+- Status LEDs
 
-UART RTL lives under [`rtl/peripherals/uart/core`](rtl/peripherals/uart/core).
+The address map is in [`docs/memory_map.md`](docs/memory_map.md). C headers
+are in [`sw/include`](sw/include), and the matching SystemVerilog packages are
+in [`rtl/include`](rtl/include).
 
-Implemented pieces:
+### MNIST demo
 
-- `uart_tx.sv`: byte serializer with ready/done-style control
-- `uart_rx.sv`: receiver with oversampling and majority voting
-- `uart_baud_rate.sv`: programmable baud-rate tick generator
-- `uart_fifo.sv`: synchronous FIFO
-- `uart_top.sv`: TX/RX/FIFO integration wrapper
+The accelerator is a first experiment and will be extended; this demo is its
+first end-to-end test.
 
-The FPGA UART hello program is [`sw/fpga/uart_hello.c`](sw/fpga/uart_hello.c).
+[`sw/fpga/nn_accel_uart_mnist.c`](sw/fpga/nn_accel_uart_mnist.c) receives a
+model and 28x28 images over UART, runs one 784 -> 10 dense layer on the
+accelerator and sends back the scores, the predicted digit and the
+accelerator cycle count. The model is a
+nearest-centroid classifier built from the MNIST training set by
+[`tools/generate_mnist_demo.py`](tools/generate_mnist_demo.py).
 
-## I2C
+```sh
+make fpga FILE=sw/fpga/nn_accel_uart_mnist.c   # then build and program in Gowin
+pip install numpy pyserial
+python3 tools/uart_mnist_client.py --port /dev/ttyUSB0 --load-model --show-image
+```
 
-I2C RTL lives under [`rtl/peripherals/i2c`](rtl/peripherals/i2c).
+The model only needs to be uploaded once. Later runs can drop `--load-model`
+and pass `--index N` to pick a test image.
 
-Implemented pieces:
+## Getting started
 
-- `i2c_byte_master_timed.sv`: timed byte engine with START, repeated START,
-  transmit, receive, ACK/NACK, STOP, clock stretching wait, timeout, and basic
-  transmit arbitration-lost detection.
-- `i2c_cmd_master_timed.sv`: command engine with command FIFO, RX FIFO, bus
-  busy/free check, bus recovery, and sticky error bits.
-- `i2c_periph.sv`: current MMIO wrapper exposing `CMD`, `STATUS`, `RXDATA`, and
-  `CTRL`.
+Requirements:
 
-The FPGA QMC5883L smoke test is [`sw/fpga/i2c_qmc5883l.c`](sw/fpga/i2c_qmc5883l.c).
-It queues byte-level I2C commands from software and prints magnetometer `XYZ`
-samples over UART.
+- `verilator` (5.x)
+- `python3`
+- `riscv64-unknown-elf-gcc`, `objcopy`, `objdump`
+- `spike` (optional, for `make arch-test` and the commit-log diff tests)
+- Gowin IDE (for the FPGA build)
 
-## Data Memory Ready/Valid Work
+```sh
+make all          # stage-level unit tests
+make core-tests   # self-checking core and SoC tests on all three cores
+make riscv-tests  # official riscv-tests (rv32ui, rv32um, rv32mi)
+make bench        # benchmarks on all three cores
+make check        # all of the above
+make arch-test    # official riscv-arch-test, compared against Spike
+make cpu-run ASM=sw/examples/hazard_raw.S CYCLES=60   # pipeline trace
+make asm-hard-test                                    # commit-log diff against Spike
+```
 
-The core data path now exposes a memory handshake:
+[`docs/simulation.md`](docs/simulation.md) covers the simulation targets and
+their options.
+
+### FPGA
+
+```sh
+make fpga FILE=sw/fpga/uart_hello.c
+```
+
+This builds the program and writes `fpga/gowin/anv32/src/prog*.hex`. The BRAM
+loads these files at synthesis. Open `fpga/gowin/anv32/anv32.gprj` in the Gowin
+IDE, then synthesize and program. The project references RTL directly from
+`rtl/`. Only the Gowin project is in the repo for now; the RTL itself is not
+vendor specific.
+
+## Layout
 
 ```text
-mem_valid_o
-mem_ready_i
-mem_addr_o
-mem_wdata_o
-mem_we
-mem_rdata_i
+rtl/core/        cores: common blocks, shared pipeline stages, per-core execute/top
+rtl/peripherals/ uart, i2c, nn_accelerator
+rtl/soc/         SoC top and per-core wrappers
+rtl/include/     ISA, config and register-map packages
+sim/tb/          Verilator testbenches
+sw/              crt0, linker scripts, examples, FPGA programs, benchmarks, tests,
+                 compliance-test model files
+tools/           build, hex conversion, Spike diff, benchmark and MNIST scripts
+fpga/gowin/      Gowin project
+docs/            memory map, simulation, benchmarks, roadmap
 ```
 
-When `mem_valid_o` is high and `mem_ready_i` is low, the pipeline holds the
-memory request stable and stalls the relevant stages. This is the foundation for
-the upcoming peripheral bus, slow register blocks, synchronous peripheral reads,
-and external-memory style wait states.
+## Status
 
-The dedicated trace test is:
+Working today: the three cores, UART, I2C, the first NN accelerator and the
+MNIST demo. All three cores pass riscv-tests and riscv-arch-test for the
+extensions they implement (RV32I/RV32IM, Zicsr and the machine-mode
+privileged suite); the only skipped tests need optional features listed under
+the limitations below. Planned next:
 
-```sh
-make mem-ready-trace CYCLES=100 MEM_READY_WAIT=3
-```
+- A superscalar core alongside the current in-order ones
+- A Linux-capable core (S/U modes, MMU, atomics)
+- A more capable NN accelerator
+- GPIO, SPI, timer and PWM peripherals. Their addresses and register layouts
+  are already defined, but most are not implemented yet; see
+  [`docs/memory_map.md`](docs/memory_map.md#register-status).
+- A shared peripheral bus with access faults on bad addresses
+- Timer interrupt and vectored interrupts
 
-The test injects wait states into memory accesses and checks that address, write
-data, and byte enables remain stable while all pipeline stages stall.
+Current limitations:
 
-## Repository Layout
+- Only machine mode; no U-mode, and zero PMP entries.
+- Misaligned loads and stores trap instead of being handled in hardware.
+- `FENCE` is a no-op; `FENCE.I` (Zifencei) is not supported.
+- No debug module and no trigger CSRs (Sdtrig).
+- No `time` CSR; `cycle` and `instret` are implemented.
+- Peripherals are decoded directly in the SoC top.
+- Accesses to unmapped addresses read as zero instead of trapping.
 
-- `rtl/`: RTL sources
-- `rtl/core/`: core pipelines and shared core blocks
-- `rtl/peripherals/`: UART, I2C, and placeholder directories for GPIO/SPI/timer
-- `rtl/soc/`: FPGA SoC wrappers and shared SoC top
-- `sim/`: Verilator testbenches
-- `sw/`: bare-metal examples, FPGA test programs, and benchmark sources
-- `fpga/gowin/`: Gowin project and generated FPGA images
-- `tools/`: host-side build and conversion scripts
-- `docs/`: notes, roadmap, benchmark notes, and simulation docs
-
-## Requirements
-
-For simulation and software builds:
-
-- `verilator`
-- `python3`
-- `riscv64-unknown-elf-gcc`
-- `riscv64-unknown-elf-objcopy`
-- `riscv64-unknown-elf-objdump`
-
-Optional for golden-reference flows:
-
-- `spike`
-
-## Simulation and Software Flow
-
-Common RTL tests:
-
-```sh
-make de
-make m
-make fetch_top
-make all
-make list
-```
-
-Build a C program and verify the generated instruction image through the fetch
-path:
-
-```sh
-make sw-fetch
-make sw-fetch C_SRC=sw/examples/smoke.c SW_NAME=smoke
-make sw-fetch KEEP=asm,hex,lanes,dump
-```
-
-Run the CPU trace flow:
-
-```sh
-make cpu-run C=sw/examples/smoke.c CYCLES=80
-make cpu-run ASM=sw/examples/load_timing.S CYCLES=80 DETAIL=1
-```
-
-Run the memory-ready stall trace:
-
-```sh
-make mem-ready-trace CYCLES=100 MEM_READY_WAIT=3
-```
-
-Assembly vs Spike diff flow:
-
-```sh
-make asm-diff-test ASM=sw/examples/hazard_raw.S
-```
-
-Benchmark flow:
-
-```sh
-make bench
-make bench BENCHMARKS=balanced BENCH_CORES=anv32im2
-make bench BENCH_FMAX='anv32i1=27,anv32im1=27,anv32im2=33'
-```
-
-More detail is available in [`docs/simulation.md`](docs/simulation.md).
-
-## FPGA Flow
-
-The active FPGA project is under [`fpga/gowin/anv32`](fpga/gowin/anv32).
-
-Build a C program for FPGA BRAM init:
-
-```sh
-make fpga FILE=sw/fpga/led.c
-make fpga FILE=sw/fpga/uart_hello.c
-make fpga FILE=sw/fpga/i2c_qmc5883l.c
-```
-
-Equivalent explicit targets:
-
-```sh
-make fpga-c C=sw/fpga/uart_hello.c
-make fpga-c C=sw/fpga/i2c_qmc5883l.c
-make fpga-asm ASM=sw/fpga/led.S
-```
-
-These update:
-
-- `fpga/gowin/anv32/src/prog.hex`
-- `fpga/gowin/anv32/src/prog_lane0.hex`
-- `fpga/gowin/anv32/src/prog_lane1.hex`
-- `fpga/gowin/anv32/src/prog_lane2.hex`
-- `fpga/gowin/anv32/src/prog_lane3.hex`
-
-The Gowin project references RTL directly from `rtl/`, so there is no duplicated
-RTL tree inside the FPGA project.
-
-## What Works Today
-
-- RV32I execution on the first core revision
-- RV32IM execution on `anv32im1` and `anv32im2`
-- CSR instructions needed by the current machine-mode flow
-- Basic trap and external interrupt plumbing
-- BRAM-backed instruction/data memory model
-- Data-memory wait-state support in the core pipeline
-- GPIO-backed IRQ pending latch in the SoC
-- UART serial output on FPGA
-- I2C LCD bring-up on FPGA
-- I2C QMC5883L register read/write and live `XYZ` output over UART
-- Verilator unit tests, CPU traces, Spike diff tests, and synthetic benchmarks
-
-## Known Gaps
-
-- No shared peripheral bus/interconnect yet
-- MMIO is still direct address decode in the SoC top
-- I2C timing and timeout values are currently RTL parameters, not runtime MMIO
-  registers
-- UART RX exists in the reusable block, but the current FPGA software examples
-  mainly exercise UART TX
-- No full debug module
-- Privilege support is machine mode only
-- RISC-V compliance-level corner cases are still incomplete
-
-## Near-Term Direction
-
-The next stage is SoC-focused:
-
-- introduce a small valid/ready peripheral bus
-- move BRAM, UART, I2C, GPIO, timer, and SPI behind bus slave wrappers
-- add `bus_error` handling and connect it to load/store access-fault traps
-- make I2C timing/IRQ/status behavior more MCU-like
-- add SPI after the bus shape is stable
-
-## Notes
-
-- Some documents in `docs/` are still written in Turkish and may lag behind the
-  latest RTL.
-- This README is intended to describe the current codebase rather than the full
-  long-term goal.
+[`docs/roadmap.md`](docs/roadmap.md) has the full list.

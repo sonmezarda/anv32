@@ -1,298 +1,194 @@
-# Simulasyon ve Yazilim Test Akisi
+# Simulation
 
-Bu not, Verilator testlerini ve C programindan BRAM image'i uretme akisinin
-kisa kullanim kilavuzudur.
+Everything runs through the top-level `Makefile` and Verilator. `make help`
+lists every target and variable.
 
-## Gerekenler
-
-- `verilator`
-- `python3`
-- RISC-V bare-metal toolchain:
-  - `riscv64-unknown-elf-gcc`
-  - `riscv64-unknown-elf-objcopy`
-  - `riscv64-unknown-elf-objdump`
-
-Varsayilan toolchain `riscv64-unknown-elf-*` isimlerini kullanir. Farkli isimli
-bir toolchain varsa Makefile degiskenleriyle verilebilir.
-
-## RTL Testleri
-
-Varsayilan hedef decode/execute stage testidir:
+The default toolchain prefix is `riscv64-unknown-elf-`. If your toolchain uses
+different names, override them:
 
 ```sh
-make
+make cpu-run SW_CC=riscv32-unknown-elf-gcc \
+             SW_OBJCOPY=riscv32-unknown-elf-objcopy \
+             SW_OBJDUMP=riscv32-unknown-elf-objdump
 ```
 
-Ayni test acik hedefle de calistirilabilir:
+## Unit tests
 
 ```sh
-make de
+make all          # run every registered test
+make de           # decode + execute (anv32i1)
+make m            # memory stage
+make fetch_top    # fetch path through anv32i1_top
+make list         # list registered tests
 ```
 
-Fetch top testi:
+`make WARN=1 <test>` shows Verilator lint warnings, and `EXTRA_VFLAGS="..."`
+passes extra flags to Verilator.
+
+## Core and SoC tests
 
 ```sh
-make fetch_top
+make core-tests
+make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep,muldiv
+make core-tests TEST_SUITES=soc
+make check        # unit tests + core/SoC tests + riscv-tests + benchmarks
 ```
 
-Memory stage testi:
+`tools/run_core_tests.py` builds each test program once and each testbench once
+per core, then prints a pass/fail table. It exits non-zero if any test fails.
+
+**Core suite** ([`sw/tests/tests.json`](../sw/tests/tests.json)): self-checking
+assembly programs run on the bare core by `sim/tb/common/tb_core_test.sv`. A
+small test device in the testbench lets a program report pass/fail and raise
+the external interrupt a given number of cycles later (see
+[`sw/tests/test.h`](../sw/tests/test.h)). The interrupt tests sweep that delay
+so the interrupt hits every pipeline position. On `anv32im2` every test also
+runs a second time with random data-port wait states.
+
+| Test           | Covers |
+| -------------- | ------ |
+| `trap_ecall`   | ECALL trap CSRs, mstatus MIE/MPIE/MPP, ECALL right after enabling MIE |
+| `trap_illegal` | illegal instruction traps and `mtval`, `FENCE` as a no-op |
+| `csr_rw`       | CSR instruction semantics, back-to-back CSR write/read |
+| `mem_access`   | load/store widths, sign extension, store/load and load/store pairs |
+| `irq_basic`    | MIE/MEIE masking, interrupt taken right after it is enabled |
+| `irq_sweep`    | interrupts at every point of a loop with load-use and jumps |
+| `irq_critical` | no interrupt inside a critical section, no starvation of a short window |
+| `muldiv`       | RV32M results and corner cases, dependent multi-cycle chains |
+| `irq_div`      | interrupts while the divider is busy |
+
+**SoC suite** ([`sw/tests/soc/tests.json`](../sw/tests/soc/tests.json)): C
+programs run on `anv32_soc_top` by `sim/tb/soc/tb_soc_test.sv`. Results come
+back through the LED register; the UART TX pin is looped back to RX.
+
+| Test                | Covers |
+| ------------------- | ------ |
+| `soc_regs`          | register reset values and read-back (UART, I2C, NN, SYSCTRL) |
+| `soc_unmapped`      | unmapped addresses ignore writes, read zero, leave RAM alone |
+| `soc_uart_loopback` | UART TX/RX through the FIFOs |
+| `soc_gpio_irq`      | GPIO interrupt pending/clear and the external interrupt path |
+| `soc_nn_smoke`      | one small dense layer on the NN accelerator |
+
+To add a test, put the source next to the others and add an entry to the
+matching `tests.json` (`"requires": ["m"]` for programs that need the M
+extension).
+
+## RISC-V compliance tests
 
 ```sh
-make m
+make riscv-tests                    # riscv-tests: rv32ui, rv32um, rv32mi
+make arch-test SPIKE=/path/to/spike # riscv-arch-test: I, M, privilege
 ```
 
-Kayitli tum testleri calistirmak:
+`tools/run_compliance.py` clones both repositories at pinned versions into
+`build/third_party` on first use. The test binaries are linked at
+`0x80000000` ([`sw/compliance/link.ld`](../sw/compliance/link.ld)) and the
+testbench is built with the same reset PC.
+
+- **riscv-tests** check themselves and write the result to `tohost`.
+- **riscv-arch-test** writes a signature to memory. Each test runs on Spike
+  and on the core, and the two signatures must match word by word.
+  [`sw/compliance/model_test.h`](../sw/compliance/model_test.h) holds the
+  model macros for both.
+
+A few tests are skipped because they need features the cores do not have
+(Zifencei, misaligned access in hardware, Sdtrig, PMP entries). The runner
+prints each skipped test with the reason. As in the core suite, `anv32im2`
+also runs every test with random data-port wait states.
+
+`make arch-test` needs Spike. The CI workflow builds it from a pinned commit;
+see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+
+## Running programs on a core
+
+`cpu-run` builds a C or assembly program, prints the disassembly and runs it
+on `anv32im1` with a per-cycle pipeline trace. The run stops at `EBREAK` or
+after `CYCLES` cycles.
 
 ```sh
-make all
+make cpu-run C=sw/examples/smoke.c CYCLES=80
+make cpu-run ASM=sw/examples/load_timing.S CYCLES=80 DETAIL=1
+make cpu-run ASM=prog.S SW_ARCH=rv32im_zicsr      # allow M instructions
 ```
 
-Test ismini degiskenle secmek:
+Options:
+
+| Variable           | Effect                                                  |
+| ------------------ | ------------------------------------------------------- |
+| `CYCLES=n`         | cycle limit (default 80)                                |
+| `DETAIL=1`         | print a detailed block for every cycle                  |
+| `TRACE=1`          | write a VCD to `obj_dir/cpu_trace.vcd`                  |
+| `PIPELINE_LOG=f`   | write the detailed trace to a file                      |
+| `SW_OPT=-O2`       | GCC optimization level for C (default `-Os`)            |
+| `SW_ARCH=...`      | `-march` value (default `rv32i_zicsr`)                  |
+
+Build outputs go to `build/sw/<name>/` for C and `build/asm/<name>/` for
+assembly.
+
+C programs are linked with `sw/common/crt0.S`. It sets up the stack, calls
+`main()`, stores the return value in `_test_result`, then executes `EBREAK`.
+
+## Memory wait states
 
 ```sh
-make test TEST=de
-make test TEST=m
-make test TEST=fetch_top
+make mem-ready-trace CYCLES=100 MEM_READY_WAIT=3
 ```
 
-Kayitli testleri listelemek:
+Runs `sw/examples/load_timing.S` (or `MEM_READY_ASM=...`) on `anv32im2` with
+`mem_ready` held low for `MEM_READY_WAIT` cycles on every data access. It
+checks that address, write data and byte enables stay stable while the
+pipeline is stalled.
 
-```sh
-make list
-```
+## Spike diff
 
-Verilator lint uyarilarini bastirmadan gormek:
-
-```sh
-make WARN=1 de
-make WARN=1 m
-make WARN=1 fetch_top
-```
-
-Ek Verilator flag'i vermek:
-
-```sh
-make de EXTRA_VFLAGS="--trace"
-```
-
-## Word Hex'i Byte-Lane Hex'e Bolmek
-
-BRAM byte-lane split oldugu icin 32-bit word hex dosyasi dort tane byte-lane
-hex dosyasina cevrilir.
-
-Varsayilan kaynak:
-
-```text
-sim/hex/prog.hex
-```
-
-Varsayilan komut:
-
-```sh
-make hex
-```
-
-Bu komut sunlari uretir:
-
-```text
-sim/hex/prog_lane0.hex
-sim/hex/prog_lane1.hex
-sim/hex/prog_lane2.hex
-sim/hex/prog_lane3.hex
-```
-
-Baska program adi icin:
-
-```sh
-make hex PROG=blink
-```
-
-Bu durumda kaynak `sim/hex/blink.hex`, ciktilar da
-`sim/hex/blink_lane0.hex` ... `sim/hex/blink_lane3.hex` olur.
-
-## C Programindan Simulasyon Image'i
-
-Varsayilan C ornegi:
-
-```text
-sw/examples/smoke.c
-```
-
-Programi build edip uretilen image'in fetch yolu uzerinden okunabildigini
-dogrulamak:
-
-```sh
-make sw-fetch
-```
-
-Bu akis su ara adimlari yapar:
-
-1. C source -> assembly `.s`
-2. assembly -> object `.o`
-3. `crt0.S` + object -> ELF
-4. ELF -> raw binary `.bin`
-5. binary -> 32-bit word hex `.hex`
-6. word hex -> 4 byte-lane hex
-7. Verilator ile `tb_program_fetch` calistirma
-
-`KEEP` verilmezse tum ara dosyalar gecici dizinde uretilir ve test bitince
-otomatik silinir.
-
-## Ara Dosyalari Saklamak
-
-Assembly, word hex ve lane hex dosyalarini gormek:
-
-```sh
-make sw-fetch KEEP=asm,hex,lanes
-```
-
-Varsayilan cikti dizini:
-
-```text
-build/sw/smoke/
-```
-
-Ornek ciktilar:
-
-```text
-build/sw/smoke/smoke.s
-build/sw/smoke/smoke.hex
-build/sw/smoke/smoke_lane0.hex
-build/sw/smoke/smoke_lane1.hex
-build/sw/smoke/smoke_lane2.hex
-build/sw/smoke/smoke_lane3.hex
-```
-
-Daha fazla ara dosya saklamak:
-
-```sh
-make sw-fetch KEEP=all
-make sw-fetch KEEP=asm,hex,lanes,elf,dump,map
-```
-
-Desteklenen `KEEP` isimleri:
-
-```text
-asm
-hex
-lanes
-elf
-bin
-dump
-map
-obj
-all
-```
-
-## Kendi C Programini Calistirmak
-
-Tek dosyali bir C programi yaz:
-
-```c
-int main(void)
-{
-    volatile int a = 10;
-    volatile int b = 20;
-    return a + b;
-}
-```
-
-Ornek dosya yolu:
-
-```text
-sw/examples/add_test.c
-```
-
-Calistirma:
-
-```sh
-make sw-fetch C_SRC=sw/examples/add_test.c SW_NAME=add_test
-```
-
-Ara dosyalari da saklayarak:
-
-```sh
-make sw-fetch C_SRC=sw/examples/add_test.c SW_NAME=add_test KEEP=asm,hex,lanes,dump
-```
-
-Bu durumda ciktilar:
-
-```text
-build/sw/add_test/add_test.s
-build/sw/add_test/add_test.hex
-build/sw/add_test/add_test_lane0.hex
-build/sw/add_test/add_test_lane1.hex
-build/sw/add_test/add_test_lane2.hex
-build/sw/add_test/add_test_lane3.hex
-build/sw/add_test/add_test.dump
-```
-
-`SW_NAME` verilmezse dosya adindan turetilir.
-
-## Spike Golden Diff Test
-
-Assembly programini 0x80000000 adresine linkleyip hem Spike hem de core
-uzerinde calistirmak ve commit loglarini karsilastirmak:
+These targets need `spike` installed. The program is linked at `0x80000000`
+and runs on both Spike and the core. The two commit logs (PC, instruction
+word and register writes) are then compared.
 
 ```sh
 make asm-diff-test ASM=sw/examples/hazard_raw.S
+make asm-diff-test ASM=sw/examples/hazard_auipc_jalr.S CYCLES=30 SPIKE_INSNS=30
+make asm-hard-test     # the RV32I stress programs in sw/examples
 ```
 
-Bu akis su dosyalari uretir:
+Logs are written to `build/golden/asm/<name>/`:
 
 ```text
-build/golden/asm/hazard_raw/spike.raw.log
-build/golden/asm/hazard_raw/spike.norm.log
-build/golden/asm/hazard_raw/core.norm.log
-build/golden/asm/hazard_raw/pipeline.log
-build/golden/asm/hazard_raw/commit.diff
+spike.raw.log    spike.norm.log    core.norm.log    pipeline.log    commit.diff
 ```
 
-`spike.norm.log` ve `core.norm.log` PC, instruction word ve register write
-event'leri uzerinden karsilastirilir. Spike'in mnemonic/alias yazimi diff'e
-dahil edilmez.
+`make asm-golden-run` produces the logs without running the diff.
 
-Ornek JALR/flush testi:
+## Benchmarks
 
 ```sh
-make asm-diff-test ASM=sw/examples/hazard_auipc_jalr.S CYCLES=30 SPIKE_INSNS=30
+make bench
 ```
 
-Sadece golden + pipeline loglarini uretmek, diff calistirmamak icin:
+See [benchmarks.md](benchmarks.md).
 
-```sh
-make asm-golden-run ASM=sw/examples/hazard_raw.S CORE_NORM_LOG=build/golden/asm/hazard_raw/core.norm.log
+## Program images
+
+The BRAM is split into four byte lanes, so every program image is stored as one
+word hex file plus four lane files (`<name>_lane0.hex` ... `<name>_lane3.hex`).
+The build scripts generate these automatically:
+
+```text
+tools/build_rv32_program.py      C -> ELF -> bin -> word hex -> lane hex
+tools/build_rv32_asm_program.py  same flow for assembly
+tools/bin_to_hex.py              raw binary -> 32-bit word hex
+tools/split_hex.py               word hex -> four lane hex files
 ```
 
-## Toolchain Ismini Degistirmek
+`make sw-fetch` builds a C program and checks that every instruction word is
+read back correctly through the fetch path. This is useful when changing the
+image flow. Use `KEEP=asm,hex,lanes,elf,bin,dump,map,obj` (or `KEEP=all`) to
+keep intermediate files under `build/sw/<name>/`.
 
-Toolchain isimleri sistemde farkliysa:
-
-```sh
-make sw-fetch \
-  SW_CC=riscv32-unknown-elf-gcc \
-  SW_OBJCOPY=riscv32-unknown-elf-objcopy \
-  SW_OBJDUMP=riscv32-unknown-elf-objdump
-```
-
-## Temizlik
-
-Verilator ciktilarini, uretilen lane hex dosyalarini ve `build/sw` altindaki
-saklanan yazilim artefact'larini temizlemek:
+## Cleaning up
 
 ```sh
 make clean
 ```
 
-## Su Anki Kapsam
-
-`sw-fetch` hedefi su an C programindan uretilen instruction image'inin BRAM
-byte-lane init dosyalariyla dogru okunabildigini fetch yolu uzerinden dogrular.
-Yani bu hedef programin tum instruction word'lerini fetch eder ve beklenen
-word hex ile karsilastirir.
-
-Tam core topolojisi fetch + DE + MW + regfile olarak baglandiginda ayni C build
-hatti dogrudan "programi calistir, sonucu kontrol et" testbench'ine baglanabilir.
-`crt0.S`, `main()` donus degerini `_test_result` sembolune yazar ve sonra
-`ebreak` uretir; bu da ileride full-core simulasyonunda bitis/success noktasi
-olarak kullanilabilir.
+This removes `obj_dir/`, generated lane hex files and `build/sw/`.

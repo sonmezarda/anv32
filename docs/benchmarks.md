@@ -1,4 +1,4 @@
-# ANV32 benchmark runner
+# Benchmarks
 
 The synthetic benchmark suite compares cores by completed work, cycle count,
 branch behavior, and optional Fmax-normalized time.
@@ -19,16 +19,16 @@ make bench BENCHMARKS=branch
 Add Fmax data in MHz:
 
 ```sh
-make bench BENCH_FMAX='anv32i1=40,anv32im1=35,anv32im2=45'
+make bench BENCH_FMAX='anv32i1=27,anv32im1=27,anv32im2=33'
 ```
 
 or pass a JSON file:
 
 ```json
 {
-  "anv32i1": 40.0,
-  "anv32im1": 35.0,
-  "anv32im2": 45.0
+  "anv32i1": 27.0,
+  "anv32im1": 27.0,
+  "anv32im2": 33.0
 }
 ```
 

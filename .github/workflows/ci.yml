@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Unit, core, SoC and riscv-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator gcc-riscv64-unknown-elf python3
+
+      - name: Unit tests
+        run: make all
+
+      - name: Core and SoC tests
+        run: make core-tests
+
+      - name: Benchmarks
+        run: make bench
+
+      - name: riscv-tests
+        run: make riscv-tests
+
+  arch-test:
+    name: riscv-arch-test against Spike
+    runs-on: ubuntu-24.04
+    env:
+      SPIKE_COMMIT: 2c300cd90eb74bb79f3fcdd58596a6f8d842d01c
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator gcc-riscv64-unknown-elf python3 \
+            device-tree-compiler build-essential
+
+      - name: Cache Spike
+        id: spike-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/spike
+          key: spike-${{ env.SPIKE_COMMIT }}
+
+      - name: Build Spike
+        if: steps.spike-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/riscv-software-src/riscv-isa-sim.git spike-src
+          cd spike-src
+          git checkout "$SPIKE_COMMIT"
+          git submodule update --init
+          mkdir build && cd build
+          ../configure --prefix="$HOME/spike"
+          make -j"$(nproc)"
+          make install
+
+      - name: riscv-arch-test
+        run: make arch-test SPIKE="$HOME/spike/bin/spike"
