@@ -20,7 +20,6 @@
         <File path="../../../rtl/core/common/anv32_decoder.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/common/anv32_csr.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/common/anv32_csr_exec.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_decoder.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/common/anv32_regfile.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32im1/anv32_execute_im.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32im1/anv32im1_top.sv" type="file.verilog" enable="1"/>
@@ -53,7 +52,6 @@
         <File path="../../../rtl/peripherals/nn_accelerator/dense_layer_engine.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/nn_accelerator/nn_accel_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32im2/anv32_forward_unit_im2.sv" type="file.verilog" enable="1"/>
-        
         <File path="src/anv32.cst" type="file.cst" enable="1"/>
         <File path="src/anv32.sdc" type="file.sdc" enable="1"/>
     </FileList>
