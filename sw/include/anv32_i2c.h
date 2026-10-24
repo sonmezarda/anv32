@@ -7,6 +7,7 @@
 #define ANV32_I2C_STATUS_OFFSET         0x004u
 #define ANV32_I2C_RXDATA_OFFSET         0x008u
 #define ANV32_I2C_CTRL_OFFSET           0x00Cu
+/* Not implemented yet: timing is still set by i2c_periph parameters. */
 #define ANV32_I2C_SCL_LOW_OFFSET        0x010u
 #define ANV32_I2C_SCL_HIGH_OFFSET       0x014u
 #define ANV32_I2C_TIMEOUT_OFFSET        0x018u
@@ -20,6 +21,7 @@
 #define ANV32_I2C_CMD_DATA(x)           (((x) & 0xffu) << 8)
 
 #define ANV32_I2C_CTRL_CLEAR            (1u << 0)
+#define ANV32_I2C_CTRL_IRQ_EN           (1u << 1)
 
 #define ANV32_I2C_STATUS_BUSY           (1u << 0)
 #define ANV32_I2C_STATUS_CMD_READY      (1u << 1)
@@ -45,6 +47,7 @@
                                          ANV32_I2C_STATUS_CMD_OVF | \
                                          ANV32_I2C_STATUS_ILLEGAL | \
                                          ANV32_I2C_STATUS_REC_FAIL)
+/* Not a hardware bit: returned by software helpers when polling times out. */
 #define ANV32_I2C_STATUS_SW_TIMEOUT     (1u << 31)
 
 #define ANV32_I2C_CMD(base)             ANV32_REG32((base) + ANV32_I2C_CMD_OFFSET)

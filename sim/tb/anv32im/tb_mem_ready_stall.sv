@@ -171,7 +171,7 @@ module tb_mem_ready_stall
             @(posedge clk);
             #1;
             print_cycle();
-            if(dut.einstr.valid && dut.einstr.is_halt) begin
+            if(dut.trap_req && dut.trap_cause == 32'd3) begin
                 break;
             end
             cycle++;

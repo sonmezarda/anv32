@@ -1,12 +1,6 @@
 `timescale 1ns/1ps
-// ============================================================================
-// tb_fetch_stage.sv
-// Detailed self-checking fetch test via anv32i1_top.
-// Core invariant: whenever instr_valid_o==1, instr_o must equal mem[pc_o>>2].
-// Exercises: cold reset, sequential, multi-cycle stall, back-to-back stalls,
-// stall right after reset, jump, jump+stall priority, stall across a jump,
-// mid-stream reset, and the alignment invariant on every cycle.
-// ============================================================================
+// Fetch path test through anv32i1_top. Checks that instr_o always matches
+// mem[pc_o >> 2] while instr_valid_o is high, across stalls, jumps and reset.
 module tb_fetch_stage;
 
     localparam logic [31:0] RESET_PC = 32'h0000_0000;

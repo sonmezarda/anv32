@@ -302,8 +302,16 @@ module tb_benchmark
             @(posedge clk);
             #1;
             sample_counters();
-            halt_seen = dut.einstr.valid && dut.einstr.is_halt;
+            // EBREAK traps in E and ends the benchmark
+            halt_seen = dut.trap_req && dut.trap_cause == 32'd3;
             cycle++;
+        end
+
+        // Let the older instructions still in M/W retire
+        repeat (3) begin
+            @(posedge clk);
+            #1;
+            sample_counters();
         end
 
         final_x10 = dut.regfile.regfile[10];

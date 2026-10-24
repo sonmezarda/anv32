@@ -86,6 +86,9 @@ module anv32i1_top
     logic [XLEN-1:0]        mret_target;
     logic                   irq_pending;
     logic                   irq_req;
+    logic                   irq_csr_hazard;
+    logic                   csr_serialize;
+    logic                   csr_cnt_stall;
     logic [XLEN-1:0]        irq_pc;
     logic                   csr_trap;
     logic [XLEN-1:0]        csr_trap_pc;
@@ -133,7 +136,14 @@ module anv32i1_top
         end
     end
 
-    assign irq_req = irq_pending && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i;
+    // Hold off interrupts while a write to mstatus/mie is still in M or W.
+    // Otherwise an IRQ could be taken after the instruction that disabled it.
+    assign irq_csr_hazard =
+        (einstr.valid && einstr.is_csr && einstr.csr_we &&
+         (einstr.csr_addr == CSR_MSTATUS || einstr.csr_addr == CSR_MIE)) ||
+        (csr_we && (csr_waddr == CSR_MSTATUS || csr_waddr == CSR_MIE));
+
+    assign irq_req = irq_pending && !irq_csr_hazard && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i;
 
     always_comb begin : csr_trap_mux_comb
         csr_trap       = trap_req || irq_req;
@@ -142,7 +152,15 @@ module anv32i1_top
         csr_trap_tval  = trap_req ? trap_tval  : '0;
     end
 
-    // PC JUMP
+    // PC redirect
+    // A write to mstatus/mie changes which interrupts are enabled. Refetch
+    // everything after it so younger instructions only reach E once the write
+    // has landed and the interrupt condition has been re-evaluated.
+    assign csr_serialize =
+        dinstr.valid && dinstr.is_csr &&
+        (dinstr.csr_addr == CSR_MSTATUS || dinstr.csr_addr == CSR_MIE) &&
+        (dinstr.csr_op == CSR_OP_RW || dinstr.rs1_idx != 5'd0);
+
     always_comb begin : pc_jump_comb
         if (pc_jmp_en_i) begin
             pc_jmp_en   = 1'b1;
@@ -156,23 +174,29 @@ module anv32i1_top
         end else if(irq_req) begin
             pc_jmp_en   = 1'b1;
             pc_jmp_addr = trap_target;
+        end else if (csr_serialize) begin
+            pc_jmp_en   = 1'b1;
+            pc_jmp_addr = dinstr.pc + 32'd4;
         end else begin
             pc_jmp_en   = e_branch_taken && e_valid && e_pc_changer;
             pc_jmp_addr = e_pc_target;
         end
     end
 
-    assign stall_f_eff  = stall_i || stall_f;
-    assign stall_de_eff = stall_i || stall_de;
+    // A counter read (mcycle/minstret and their aliases) waits in D until
+    // every older instruction has retired, so minstret counts all of them.
+    assign csr_cnt_stall =
+        dinstr_decode.valid && dinstr_decode.is_csr && csr_is_counter(dinstr_decode.csr_addr) &&
+        (dinstr.valid || einstr.valid || minstr.valid);
+
+    assign stall_f_eff  = stall_i || stall_f || csr_cnt_stall;
+    assign stall_de_eff = stall_i || stall_de || csr_cnt_stall;
     assign stall_e      = 1'b0;
     assign stall_e_eff  = stall_i || stall_e;
     assign stall_m_eff  = stall_i;
     assign stall_w_eff  = stall_i;
 
     anv32_hazard_basic hazard_unit(
-        .clk_i(clk_i), 
-        .rst_i(rst_i), 
-        .stall_i(1'b0),
         .branch_taken_i(pc_jmp_en),
         .dinstr_d_i(dinstr_decode), // instr currently in decode
         .dinstr_e_i(dinstr),        // instr currently in execute
@@ -253,6 +277,10 @@ module anv32i1_top
 
     anv32_decode_c1 D(
         .clk_i(clk_i),
+        .hold_i(stall_i),
+        .rs1_hold_i(rs1_E_din),
+        .rs2_hold_i(rs2_E_din),
+        .csr_hold_i(csr_rdata_E),
         .rst_i(rst_i),
         .flush_i(flush_D),
         .stall_i(stall_de_eff),
@@ -297,7 +325,7 @@ module anv32i1_top
         .einstr_i(einstr),
         .mem_rdata_i(mem_rdata_i),
         .mem_valid_o(dmem_valid),
-        .mem_addr_o(m_stage_dmem_addr_out),   //
+        .mem_addr_o(m_stage_dmem_addr_out),
         .mem_wdata_o(dmem_wdata),
         .mem_we_o(dmem_we),
         .mem_rdata_o(m_stage_mem_out),
@@ -333,7 +361,7 @@ module anv32i1_top
         .rs2_rdata_o(rs2_rdata)
     );
 
-    anv32_csr csr (
+    anv32_csr #(.MISA_VALUE(MISA_MXL32 | MISA_I)) csr (
         .clk_i       (clk_i),
         .rst_i       (rst_i),
         .csr_raddr_i (csr_addr),
@@ -341,6 +369,7 @@ module anv32i1_top
         .csr_we_i    (csr_we),
         .csr_waddr_i (csr_waddr),
         .csr_wdata_i (csr_wdata),
+        .retire_i    (minstr.valid && !stall_w_eff),
         .ext_irq_i   (ext_irq_i),
         .mtvec_o     (mtvec),
         .mepc_o      (mepc),

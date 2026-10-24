@@ -2,8 +2,6 @@ module anv32_mul_comb
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 (
-    input  logic            clk_i,
-    input  logic            rst_i,
     input  op_e             op_i,
     input  logic [XLEN-1:0] a_i,
     input  logic [XLEN-1:0] b_i,

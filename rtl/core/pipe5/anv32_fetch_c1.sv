@@ -1,11 +1,7 @@
-// ============================================================================
-// anv32_fetch_c1.sv
-
-// Interface:
+// Fetch stage.
 //   fetch_addr_o -> RAM address (live fetch pointer)
 //   instr_i      <- RAM registered read data
 //   finstr_o     -> aligned packet for the decode stage
-// ============================================================================
 module anv32_fetch_c1
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
@@ -40,8 +36,8 @@ module anv32_fetch_c1
 
     assign fetch_addr_o = pc_fetch;
 
-    // PC alignment + valid. pc_align lags pc_fetch by one cycle to match the
-    // valid is 0 during reset warm-up and on a jump (wrong-path flush).
+    // pc_align lags pc_fetch by one cycle to line up with the registered RAM
+    // output. valid is 0 during reset warm-up and on a jump (wrong-path flush).
     logic [XLEN-1:0] pc_align;
 
     always_ff @(posedge clk_i) begin
@@ -55,7 +51,6 @@ module anv32_fetch_c1
         // stall: hold pc_align and valid
     end
 
-    
     // Skid buffer. The sync RAM's in-flight read completes during a stall and
     // would change instr_i, so we cannot pass it through while stalled.
     // Rule: keep the buffer fresh every normal cycle; capture once on the
@@ -78,7 +73,7 @@ module anv32_fetch_c1
         end
     end
 
-    // instr to DE: use the registered stall state to avoid a comb loop through
+    // Instruction to decode: use the registered stall state to avoid a comb loop through
     // hazard -> stall -> fetch instruction -> decode -> hazard.
     assign finstr_o.pc = pc_align;
     assign finstr_o.valid = instr_valid;

@@ -3,6 +3,10 @@
 
 #include "anv32_mmio.h"
 
+/*
+ * Only IRQ_PENDING is implemented (one interrupt input, write 1 to clear).
+ * The rest of the GPIO block is not implemented yet.
+ */
 #define ANV32_GPIO_DATA_OFFSET          0x000u
 #define ANV32_GPIO_DIR_OFFSET           0x004u
 #define ANV32_GPIO_OUT_SET_OFFSET       0x008u

@@ -86,7 +86,7 @@ module uart_rx #(
                         end
                         if(sample_count == 4'd15) begin
                             if(sample_vote == START_BIT_VALUE) begin
-                                // it's real start bit, start data
+                                // valid start bit, start receiving data
                                 state        <= ST_DATA;
                                 sample_count <= 4'd0;
                                 bit_index    <= 3'd0;

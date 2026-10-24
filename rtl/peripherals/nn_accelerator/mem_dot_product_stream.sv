@@ -1,4 +1,4 @@
-module memory_dot_product_stream (
+module mem_dot_product_stream (
     input  logic               clk_i,
     input  logic               rst_i,
 

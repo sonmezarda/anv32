@@ -130,7 +130,7 @@ $(FETCH_TEST_LANE_HEX) &: $(FETCH_TEST_HEX_SRC) $(HEX_SPLIT)
 # ---------------------------------------------------------------------------
 TESTS := de m fetch_top
 
-TOP_de := anv32_decode_execute_c1_tb
+TOP_de := tb_de_stage
 SRC_de := \
 	$(COMMON_PKGS) \
 	rtl/core/common/anv32_alu.sv \
@@ -138,14 +138,14 @@ SRC_de := \
 	rtl/core/common/anv32_csr_exec.sv \
 	rtl/core/pipe5/anv32_decode_c1.sv \
 	rtl/core/anv32i1/anv32_execute_i_c1.sv \
-	sim/tb/anv32i/tb_DE_stage.sv
+	sim/tb/anv32i/tb_de_stage.sv
 HEX_de :=
 
-TOP_m := anv32_memory_c1_tb
+TOP_m := tb_m_stage
 SRC_m := \
 	$(COMMON_PKGS) \
 	rtl/core/pipe5/anv32_memory_c1.sv \
-	sim/tb/anv32i/tb_M_stage.sv
+	sim/tb/anv32i/tb_m_stage.sv
 HEX_m :=
 
 TOP_fetch_top := tb_fetch_stage
@@ -164,7 +164,7 @@ SRC_fetch_top := \
 	rtl/core/pipe5/anv32_memory_c1.sv \
 	rtl/core/pipe5/anv32_writeback_c1.sv \
 	rtl/core/anv32i1/anv32i1_top.sv \
-	sim/tb/anv32i/tb_top_fetchtest.sv
+	sim/tb/anv32i/tb_fetch_stage.sv
 HEX_fetch_top := $(FETCH_TEST_LANE_HEX)
 
 SRC_program_fetch := \
@@ -656,9 +656,9 @@ list:
 help:
 	@echo "Usage:"
 	@echo "  make                 Run default test: de"
-	@echo "  make de              Run tb_DE_stage.sv"
-	@echo "  make m               Run tb_M_stage.sv"
-	@echo "  make fetch_top       Run tb_top_fetchtest.sv (needs lane hex)"
+	@echo "  make de              Run tb_de_stage.sv"
+	@echo "  make m               Run tb_m_stage.sv"
+	@echo "  make fetch_top       Run tb_fetch_stage.sv (needs lane hex)"
 	@echo "  make all             Run all registered tests"
 	@echo "  make test TEST=name  Run a registered test"
 	@echo "  make hex             Generate byte-lane hex from PROG ($(PROG))"

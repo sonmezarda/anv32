@@ -18,6 +18,9 @@
 #define ANV32_UART_STATUS_RX_FULL       (1u << 6)
 #define ANV32_UART_STATUS_RX_BUSY       (1u << 7)
 
+#define ANV32_UART_ERROR_FRAMING        (1u << 0)
+#define ANV32_UART_ERROR_OVERFLOW       (1u << 1)
+
 #define ANV32_UART_TXDATA(base)         ANV32_REG32((base) + ANV32_UART_TXDATA_OFFSET)
 #define ANV32_UART_STATUS(base)         ANV32_REG32((base) + ANV32_UART_STATUS_OFFSET)
 #define ANV32_UART_BAUD(base)           ANV32_REG32((base) + ANV32_UART_BAUD_OFFSET)

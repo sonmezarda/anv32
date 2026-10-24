@@ -17,6 +17,7 @@ module anv32_memory_c1
 );
     logic [XLEN-1:0] load_data;
     logic [XLEN-1:0] load_data_hold;
+    logic            stall_q;
     logic [7:0]      load_byte;
     logic [15:0]     load_half;
     minstr_t         minstr;
@@ -24,7 +25,10 @@ module anv32_memory_c1
     assign mem_valid_o = einstr_i.valid && einstr_i.is_mem;
     assign mem_addr_o = einstr_i.alu_result;
     assign minstr_o = minstr;
-    assign mem_rdata_o = stall_i ? load_data_hold : load_data;
+    // The memory returns the load data for minstr one cycle after the request.
+    // If M/W stall, the bus moves on to the next request, so the data is
+    // captured on the first stall cycle and used until W can retire.
+    assign mem_rdata_o = stall_q ? load_data_hold : load_data;
 
     always_comb begin
         mem_we_o    = 4'b0000;
@@ -68,11 +72,19 @@ module anv32_memory_c1
     end
 
     always_ff @(posedge clk_i) begin
+        if (rst_i) begin
+            stall_q        <= 1'b0;
+            load_data_hold <= '0;
+        end else begin
+            stall_q <= stall_i;
+            if (stall_i && !stall_q) load_data_hold <= load_data;
+        end
+    end
+
+    always_ff @(posedge clk_i) begin
         if(rst_i) begin
             minstr <= '0;
-            load_data_hold <= '0;
         end else if(!stall_i) begin
-            load_data_hold     <= load_data;
             minstr.valid       <= einstr_i.valid;
             minstr.pc          <= einstr_i.pc;
             minstr.instr       <= einstr_i.instr;

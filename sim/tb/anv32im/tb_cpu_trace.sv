@@ -22,6 +22,7 @@ module tb_cpu_trace
     logic [3:0]  mem_we;
     int unsigned cycle = 0;
     bit halt_seen = 1'b0;
+    dinstr_t halt_instr;
     int log_fd = 0;
     int commit_fd = 0;
     bit log_enabled = 1'b0;
@@ -203,12 +204,6 @@ module tb_cpu_trace
             end
         end
 
-        if (dut.einstr.valid && dut.einstr.is_halt) begin
-            emit_commit($sformatf("core0 pc=%s instr=%s %-7s",
-                                  commit_pc(dut.einstr.pc),
-                                  hex32(dut.einstr.instr),
-                                  op_name(dut.einstr.op)));
-        end
     endtask
 
     task automatic print_header();
@@ -278,13 +273,13 @@ module tb_cpu_trace
         if (dut.flush_D) begin
             ctrl_s = {ctrl_s, " flush_de"};
         end
-        if (dut.stall_f || dut.stall_d || dut.stall_e || dut.stall_m || dut.stall_w) begin
+        if (dut.stall_f_eff || dut.stall_d_eff || dut.stall_e_eff || dut.stall_m_eff || dut.stall_w_eff) begin
             ctrl_s = {ctrl_s, $sformatf(" stall=f%0b/d%0b/e%0b/m%0b/w%0b",
-                                        dut.stall_f,
-                                        dut.stall_d,
-                                        dut.stall_e,
-                                        dut.stall_m,
-                                        dut.stall_w)};
+                                        dut.stall_f_eff,
+                                        dut.stall_d_eff,
+                                        dut.stall_e_eff,
+                                        dut.stall_m_eff,
+                                        dut.stall_w_eff)};
         end
 
         emit($sformatf("%5d | %-22s | %-22s | %-29s | %-27s | %-14s%s",
@@ -299,11 +294,11 @@ module tb_cpu_trace
                               yn(dut.pc_jmp_en),
                               hex32(dut.pc_jmp_addr),
                               yn(dut.flush_D),
-                              dut.stall_f,
-                              dut.stall_d,
-                              dut.stall_e,
-                              dut.stall_m,
-                              dut.stall_w));
+                              dut.stall_f_eff,
+                              dut.stall_d_eff,
+                              dut.stall_e_eff,
+                              dut.stall_m_eff,
+                              dut.stall_w_eff));
 
         if (dut.finstr.valid) begin
             emit_detail($sformatf("  IF(fetch): pc=%s instr=%s next_fetch=%s pmem_addr=%s",
@@ -347,12 +342,11 @@ module tb_cpu_trace
                                   hex32(dut.einstr.alu_result),
                                   hex32(dut.einstr.write_data),
                                   hex32(dut.einstr.link_pc)));
-            emit_detail($sformatf("             branch=%0b target=%s mem=%0b pcchg=%0b halt=%0b",
+            emit_detail($sformatf("             branch=%0b target=%s mem=%0b pcchg=%0b",
                                   dut.einstr.branch_taken,
                                   hex32(dut.einstr.pc_target),
                                   dut.einstr.is_mem,
-                                  dut.einstr.is_pc_changer,
-                                  dut.einstr.is_halt));
+                                  dut.einstr.is_pc_changer));
         end else begin
             emit_detail("  EX(reg):   bubble");
         end
@@ -447,8 +441,23 @@ module tb_cpu_trace
             print_cycle();
             print_detail();
             print_commit();
-            halt_seen = dut.einstr.valid && dut.einstr.is_halt;
+            halt_seen = dut.trap_req && dut.trap_cause == 32'd3;
             cycle++;
+        end
+
+        // EBREAK traps in E; let the older instructions in M/W retire, then
+        // log the EBREAK itself last, in program order.
+        if (halt_seen) begin
+            halt_instr = dut.dinstr;
+            repeat (3) begin
+                @(posedge clk);
+                #1;
+                print_commit();
+            end
+            emit_commit($sformatf("core0 pc=%s instr=%s %-7s",
+                                  commit_pc(halt_instr.pc),
+                                  hex32(halt_instr.instr),
+                                  op_name(halt_instr.op)));
         end
 
         if (halt_seen) begin

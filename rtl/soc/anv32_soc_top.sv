@@ -69,6 +69,8 @@ module anv32_soc_top
     logic                   uart_rx_read;
     logic                   i2c_write;
     logic                   i2c_read;
+    logic                   bram_sel;
+    logic                   bram_sel_q;
     logic                   mmio_sel;
     logic                   mmio_sel_q;
     logic [31:0]            mmio_rdata;
@@ -90,6 +92,8 @@ module anv32_soc_top
     logic        uart_rx_overflow;
     logic        uart_framing_error_pulse;
     logic        uart_rx_overflow_pulse;
+    logic [31:0] uart_status;
+    logic [31:0] uart_error;
     logic [31:0] i2c_rdata;
     logic        i2c_irq;
     logic        nn_accel_hit;
@@ -133,20 +137,34 @@ module anv32_soc_top
     assign i2c_read  = i2c_sel && mem_ready && (mem_we == 4'b0);
 
     assign mem_ready = nn_accel_hit ? nn_accel_ready : 1'b1;
-    assign dmem_we = (mem_valid && !mmio_sel && mem_ready) ? mem_we : 4'b0;
+    // Only addresses inside the BRAM region reach the RAM. Anything else that is
+    // not a peripheral (reserved slots, unimplemented registers) ignores writes
+    // and reads as zero instead of aliasing onto RAM.
+    assign bram_sel = mem_valid && !mmio_sel &&
+                      ((mem_addr & ~(BRAM_SIZE - 1)) == BRAM_BASE);
+    assign dmem_we = (bram_sel && mem_ready) ? mem_we : 4'b0;
+
+    always_comb begin
+        uart_status = '0;
+        uart_status[UART_STATUS_TX_READY] = uart_tx_ready;
+        uart_status[UART_STATUS_TX_EMPTY] = uart_tx_empty;
+        uart_status[UART_STATUS_TX_BUSY]  = uart_tx_busy;
+        uart_status[UART_STATUS_TX_DONE]  = uart_tx_done;
+        uart_status[UART_STATUS_RX_VALID] = uart_rx_valid;
+        uart_status[UART_STATUS_RX_EMPTY] = uart_rx_empty;
+        uart_status[UART_STATUS_RX_FULL]  = uart_rx_full;
+        uart_status[UART_STATUS_RX_BUSY]  = uart_rx_busy;
+
+        uart_error = '0;
+        uart_error[UART_ERROR_FRAMING]  = uart_framing_error;
+        uart_error[UART_ERROR_OVERFLOW] = uart_rx_overflow;
+    end
+
     assign mmio_rdata = led_sel ? led_reg :
                         gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
-                        uart_status_sel ? {24'b0,
-                                           uart_rx_busy,
-                                           uart_rx_full,
-                                           uart_rx_empty,
-                                           uart_rx_valid,
-                                           uart_tx_done,
-                                           uart_tx_busy,
-                                           uart_tx_empty,
-                                           uart_tx_ready} :
+                        uart_status_sel ? uart_status :
                         uart_baud_sel ? uart_baud_rate :
-                        uart_error_sel ? {30'b0, uart_rx_overflow, uart_framing_error} :
+                        uart_error_sel ? uart_error :
                         uart_rxdata_sel ? {24'b0, uart_rx_data} :
                         i2c_sel ? i2c_rdata :
                         nn_accel_hit ? nn_accel_rdata :
@@ -155,7 +173,8 @@ module anv32_soc_top
     // is already registered, so the data is valid exactly one cycle after the
     // request, matching the data-BRAM timing.
     assign mem_rdata = nn_scratch_sel_q ? nn_scratch_rdata :
-                       mmio_sel_q ? mmio_rdata_q : dmem_rdata;
+                       mmio_sel_q       ? mmio_rdata_q     :
+                       bram_sel_q       ? dmem_rdata       : 32'b0;
     assign gpio_irq_rise = gpio_irq_reg2 && !gpio_irq_reg2_q;
     assign external_irq = gpio_irq_pending || nn_accel_irq;
 
@@ -168,6 +187,7 @@ module anv32_soc_top
             gpio_irq_pending <= 1'b0;
             uart_baud_rate   <= 32'd115200;
             mmio_sel_q       <= 1'b0;
+            bram_sel_q       <= 1'b0;
             mmio_rdata_q     <= 32'b0;
             nn_scratch_sel_q <= 1'b0;
         end else if (led_write) begin
@@ -178,6 +198,7 @@ module anv32_soc_top
 
         if (!rst_i) begin
             mmio_sel_q   <= mmio_sel;
+            bram_sel_q   <= bram_sel;
             mmio_rdata_q <= mmio_rdata;
             nn_scratch_sel_q <= nn_scratch_sel;
 
@@ -249,6 +270,7 @@ module anv32_soc_top
 
     nn_accel_periph #(
         .BASE_ADDR(NN_ACCEL_BASE_ADDR),
+        .SCRATCH_OFFSET(NN_SCRATCH_BASE - NN_BASE),
         .SCRATCH_WORDS(4096)
     ) nn_accel (
         .clk_i(clk_i),

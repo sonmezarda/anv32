@@ -21,7 +21,9 @@ module anv32_execute_im_c1
     dinstr_t         dinstr_e2_q;
 
     always_ff @(posedge clk_i) begin
-        if(rst_i || kill_i) begin
+        // A kill only drops the instruction moving into E2. While E2 is
+        // stalled it still holds an older instruction that must not be lost.
+        if(rst_i || (kill_i && !stall_i)) begin
             dinstr_e2_q     <= '0;
             rs1_e2_rdata_q  <= '0;
             rs2_e2_rdata_q  <= '0;

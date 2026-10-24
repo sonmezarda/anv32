@@ -6,13 +6,20 @@ module anv32_decode_c1
 )(
     input  logic               clk_i,
     input  logic               rst_i,
-    input  logic               stall_i,
+    input  logic               stall_i,    // insert a bubble, D keeps its instruction
+    input  logic               hold_i,     // next stage is stalled: keep dinstr_o
     input  logic               flush_i,
 
     input  finstr_t            finstr_i,
     input  logic    [XLEN-1:0] rs1_rdata_i,
     input  logic    [XLEN-1:0] rs2_rdata_i,
     input  logic    [XLEN-1:0] csr_rdata_i,
+
+    // Next stage's forwarded operands. While holding, the producers they came
+    // from can retire, so the held instruction keeps these values instead.
+    input  logic    [XLEN-1:0] rs1_hold_i,
+    input  logic    [XLEN-1:0] rs2_hold_i,
+    input  logic    [XLEN-1:0] csr_hold_i,
 
     output logic    [4:0]      rs1_idx_o,
     output logic    [4:0]      rs2_idx_o,
@@ -38,13 +45,16 @@ module anv32_decode_c1
     anv32_decoder #(.HAS_M(HAS_M)) decoder (
         .instr_i (finstr_i.instr),
         .pc_i    (finstr_i.pc),
-        .id_i    ('0),                 // TODO: commit id
         .dinstr_o(decoded)
     );
 
     always_ff @(posedge clk_i) begin
         if (rst_i) begin
             dinstr_o <= '0;
+        end else if (hold_i) begin
+            dinstr_o.rs1_rdata <= rs1_hold_i;
+            dinstr_o.rs2_rdata <= rs2_hold_i;
+            dinstr_o.csr_rdata <= csr_hold_i;
         end else if (stall_i) begin
             dinstr_o <= '0;
         end else begin

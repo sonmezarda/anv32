@@ -1,4 +1,6 @@
-module nn_accel_periph #(
+module nn_accel_periph
+    import anv32_nn_regs_pkg::*;
+#(
     parameter logic [31:0] BASE_ADDR       = 32'h1001_0000,
     parameter logic [31:0] SCRATCH_OFFSET  = 32'h0000_1000,
     parameter int unsigned SCRATCH_WORDS   = 4096,
@@ -21,19 +23,6 @@ module nn_accel_periph #(
 
     output logic        irq_o
 );
-
-    localparam logic [31:0] REG_CONTROL            = 32'h0000_0000;
-    localparam logic [31:0] REG_STATUS             = 32'h0000_0004;
-    localparam logic [31:0] REG_INPUT_BASE         = 32'h0000_0008;
-    localparam logic [31:0] REG_WEIGHT_BASE        = 32'h0000_000C;
-    localparam logic [31:0] REG_BIAS_BASE          = 32'h0000_0010;
-    localparam logic [31:0] REG_OUTPUT_BASE        = 32'h0000_0014;
-    localparam logic [31:0] REG_INPUT_LENGTH_WORDS = 32'h0000_0018;
-    localparam logic [31:0] REG_OUTPUT_COUNT       = 32'h0000_001C;
-    localparam logic [31:0] REG_CONFIG             = 32'h0000_0020;
-    localparam logic [31:0] REG_RESULT_ARGMAX      = 32'h0000_0024;
-    localparam logic [31:0] REG_BEST_SCORE         = 32'h0000_0028;
-    localparam logic [31:0] REG_CYCLE_COUNT        = 32'h0000_002C;
 
     localparam logic [31:0] SCRATCH_BYTES =
         32'(SCRATCH_WORDS) << 2;
@@ -143,7 +132,7 @@ module nn_accel_periph #(
         periph_hit;
 
     // Scratch read data comes from the registered BRAM output, so it is valid
-    // one cycle after the address is presented — same timing as the SoC data
+    // one cycle after the address is presented, the same timing as the SoC data
     // BRAM. The SoC must consume it directly instead of through its extra
     // MMIO read register, which would add a second cycle of latency.
     assign scratch_rdata_o =
@@ -285,56 +274,56 @@ module nn_accel_periph #(
 
         if (reg_hit) begin
             unique case (offset)
-                REG_CONTROL: begin
+                NN_CONTROL_OFFSET: begin
                     mem_rdata_o = 32'b0;
                 end
 
-                REG_STATUS: begin
-                    mem_rdata_o[0] = dense_busy;
-                    mem_rdata_o[1] = done_pending_q;
-                    mem_rdata_o[2] = error_latched_q;
-                    mem_rdata_o[3] = irq_enable_q;
-                    mem_rdata_o[4] = best_valid_q;
+                NN_STATUS_OFFSET: begin
+                    mem_rdata_o[NN_STATUS_BUSY_BIT]       = dense_busy;
+                    mem_rdata_o[NN_STATUS_DONE_BIT]       = done_pending_q;
+                    mem_rdata_o[NN_STATUS_ERROR_BIT]      = error_latched_q;
+                    mem_rdata_o[NN_STATUS_IRQ_ENABLE_BIT] = irq_enable_q;
+                    mem_rdata_o[NN_STATUS_BEST_VALID_BIT] = best_valid_q;
                 end
 
-                REG_INPUT_BASE: begin
+                NN_INPUT_BASE_OFFSET: begin
                     mem_rdata_o = input_base_q;
                 end
 
-                REG_WEIGHT_BASE: begin
+                NN_WEIGHT_BASE_OFFSET: begin
                     mem_rdata_o = weight_base_q;
                 end
 
-                REG_BIAS_BASE: begin
+                NN_BIAS_BASE_OFFSET: begin
                     mem_rdata_o = bias_base_q;
                 end
 
-                REG_OUTPUT_BASE: begin
+                NN_OUTPUT_BASE_OFFSET: begin
                     mem_rdata_o = output_base_q;
                 end
 
-                REG_INPUT_LENGTH_WORDS: begin
+                NN_INPUT_LEN_WORDS_OFFSET: begin
                     mem_rdata_o = {16'b0, input_length_words_q};
                 end
 
-                REG_OUTPUT_COUNT: begin
+                NN_OUTPUT_COUNT_OFFSET: begin
                     mem_rdata_o = {16'b0, output_count_q};
                 end
 
-                REG_CONFIG: begin
-                    mem_rdata_o[0] = relu_enable_q;
-                    mem_rdata_o[1] = irq_enable_q;
+                NN_CONFIG_OFFSET: begin
+                    mem_rdata_o[NN_CONFIG_RELU_BIT]       = relu_enable_q;
+                    mem_rdata_o[NN_CONFIG_IRQ_ENABLE_BIT] = irq_enable_q;
                 end
 
-                REG_RESULT_ARGMAX: begin
+                NN_RESULT_ARGMAX_OFFSET: begin
                     mem_rdata_o = {16'b0, best_index_q};
                 end
 
-                REG_BEST_SCORE: begin
+                NN_BEST_SCORE_OFFSET: begin
                     mem_rdata_o = best_score_q;
                 end
 
-                REG_CYCLE_COUNT: begin
+                NN_CYCLE_COUNT_OFFSET: begin
                     mem_rdata_o = cycle_count_q;
                 end
 
@@ -398,8 +387,8 @@ module nn_accel_periph #(
 
             if (reg_hit && write_access) begin
                 unique case (offset)
-                    REG_CONTROL: begin
-                        if (mem_wdata_i[0] && !dense_busy) begin
+                    NN_CONTROL_OFFSET: begin
+                        if (mem_wdata_i[NN_CONTROL_START_BIT] && !dense_busy) begin
                             start_pulse_q   <= 1'b1;
                             done_pending_q  <= 1'b0;
                             error_latched_q <= 1'b0;
@@ -409,39 +398,39 @@ module nn_accel_periph #(
                             cycle_count_q   <= 32'd0;
                         end
 
-                        if (mem_wdata_i[1]) begin
+                        if (mem_wdata_i[NN_CONTROL_CLEAR_BIT]) begin
                             done_pending_q  <= 1'b0;
                             error_latched_q <= 1'b0;
                         end
                     end
 
-                    REG_INPUT_BASE: begin
+                    NN_INPUT_BASE_OFFSET: begin
                         input_base_q <= mem_wdata_i;
                     end
 
-                    REG_WEIGHT_BASE: begin
+                    NN_WEIGHT_BASE_OFFSET: begin
                         weight_base_q <= mem_wdata_i;
                     end
 
-                    REG_BIAS_BASE: begin
+                    NN_BIAS_BASE_OFFSET: begin
                         bias_base_q <= mem_wdata_i;
                     end
 
-                    REG_OUTPUT_BASE: begin
+                    NN_OUTPUT_BASE_OFFSET: begin
                         output_base_q <= mem_wdata_i;
                     end
 
-                    REG_INPUT_LENGTH_WORDS: begin
+                    NN_INPUT_LEN_WORDS_OFFSET: begin
                         input_length_words_q <= mem_wdata_i[15:0];
                     end
 
-                    REG_OUTPUT_COUNT: begin
+                    NN_OUTPUT_COUNT_OFFSET: begin
                         output_count_q <= mem_wdata_i[15:0];
                     end
 
-                    REG_CONFIG: begin
-                        relu_enable_q <= mem_wdata_i[0];
-                        irq_enable_q  <= mem_wdata_i[1];
+                    NN_CONFIG_OFFSET: begin
+                        relu_enable_q <= mem_wdata_i[NN_CONFIG_RELU_BIT];
+                        irq_enable_q  <= mem_wdata_i[NN_CONFIG_IRQ_ENABLE_BIT];
                     end
 
                     default: begin

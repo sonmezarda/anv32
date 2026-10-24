@@ -15,4 +15,7 @@ package anv32_uart_regs_pkg;
     localparam int unsigned UART_STATUS_RX_FULL  = 6;
     localparam int unsigned UART_STATUS_RX_BUSY  = 7;
 
+    localparam int unsigned UART_ERROR_FRAMING   = 0;
+    localparam int unsigned UART_ERROR_OVERFLOW  = 1;
+
 endpackage

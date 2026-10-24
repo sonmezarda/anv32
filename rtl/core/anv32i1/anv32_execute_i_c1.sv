@@ -31,10 +31,6 @@ module anv32_execute_i_c1
     logic            branch_taken;
     logic            csr_we;
 
-    assign trap_req_o   = dinstr_i.valid && dinstr_i.exc_valid;
-    assign trap_pc_o    = dinstr_i.pc;
-    assign trap_cause_o = dinstr_i.exc_cause;
-    assign trap_tval_o  = dinstr_i.exc_tval;
     assign mret_req_o   = dinstr_i.valid && dinstr_i.op == MRET;
 
     always_comb begin
@@ -73,10 +69,36 @@ module anv32_execute_i_c1
         .result_o(alu_result)
     );
 
+    // Exceptions detected here: a misaligned load/store address, or a taken
+    // jump/branch to an address that is not 4-byte aligned (no C extension).
+    logic mem_misaligned_exc, fetch_misaligned_exc;
+
+    assign mem_misaligned_exc   = dinstr_i.is_mem && mem_misaligned(dinstr_i.op, alu_result[1:0]);
+    assign fetch_misaligned_exc = dinstr_i.is_pc_changer && branch_taken && pc_target[1];
+
+    assign trap_req_o = dinstr_i.valid &&
+                        (dinstr_i.exc_valid || mem_misaligned_exc || fetch_misaligned_exc);
+    assign trap_pc_o  = dinstr_i.pc;
+
+    always_comb begin : trap_info_comb
+        if (dinstr_i.exc_valid) begin
+            trap_cause_o = dinstr_i.exc_cause;
+            trap_tval_o  = dinstr_i.exc_tval;
+        end else if (mem_misaligned_exc) begin
+            trap_cause_o = mcause_exception(is_load(dinstr_i.op) ? MCAUSE_LOAD_ADDR_MISALIGNED
+                                                              : MCAUSE_STORE_ADDR_MISALIGNED);
+            trap_tval_o  = alu_result;
+        end else begin
+            trap_cause_o = mcause_exception(MCAUSE_INSTR_ADDR_MISALIGNED);
+            trap_tval_o  = pc_target;
+        end
+    end
+
     anv32_csr_exec csr_exec (
         .valid_i    (dinstr_i.valid && dinstr_i.is_csr),
         .csr_op_i   (dinstr_i.csr_op),
         .csr_imm_i  (dinstr_i.csr_imm),
+        .csr_addr_i (dinstr_i.csr_addr),
         .rs1_idx_i  (dinstr_i.rs1_idx),
         .rs1_rdata_i(rs1_rdata_i),
         .csr_rdata_i(csr_rdata_i),
@@ -110,9 +132,7 @@ module anv32_execute_i_c1
             einstr_o.csr_addr      <= dinstr_i.csr_addr;
             einstr_o.csr_we        <= csr_we;
             einstr_o.csr_wdata     <= csr_wdata;
-            einstr_o.is_halt       <= dinstr_i.is_halt;
             einstr_o.pc            <= dinstr_i.pc;
-            einstr_o.id            <= dinstr_i.id;
             einstr_o.instr         <= dinstr_i.instr;
         end
     end

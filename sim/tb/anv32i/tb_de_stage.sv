@@ -1,21 +1,8 @@
-// ============================================================================
-// anv32_decode_execute_c1_tb.sv
-// Self-checking testbench for the decode_c1 + execute_i_c1 path.
-//
-// ASSUMES the post-refactor interfaces:
-//   anv32_alu       : ports (op_i: alu_op_e, a_i, b_i, result_o)
-//   anv32_decoder   : derives alu_op / a_sel / b_sel / wb_sel into dinstr_t
-//   einstr_t        : has link_pc + control passthrough (rd_idx, rd_valid,
-//                     wb_sel, is_mem, is_pc_changer, is_halt, pc, id, op)
-//
-// Compile order: config_pkg, isa_pkg, alu, decoder, decode/execute, this tb.
-// Strategy: encode real RV32I instructions independently of the decoder,
-// hand-compute golden values, drive, clock once (output is registered),
-// then check. A behavioural regfile answers the DUT's index outputs async.
-// ============================================================================
+// Decode + execute (anv32i1) testbench. Instructions are encoded here
+// independently of the decoder and checked against hand-computed results.
 `timescale 1ns/1ps
 
-module anv32_decode_execute_c1_tb
+module tb_de_stage
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 ;
@@ -55,6 +42,10 @@ module anv32_decode_execute_c1_tb
         .clk_i      (clk),
         .rst_i      (rst),
         .stall_i    (stall),
+        .hold_i     (1'b0),
+        .rs1_hold_i ('0),
+        .rs2_hold_i ('0),
+        .csr_hold_i ('0),
         .flush_i    (1'b0),
         .finstr_i   (finstr),
         .rs1_rdata_i(rs1_rdata),
@@ -173,6 +164,27 @@ module anv32_decode_execute_c1_tb
         #1;               // let NBA update settle
     endtask
 
+    // Drive one instruction that must trap in E with the given cause/tval.
+    task automatic run_trap(string nm, logic [31:0] instr, logic [31:0] pc,
+                            logic [31:0] cause, logic [31:0] tval);
+        cur = nm;
+        @(negedge clk);
+        finstr.valid = 1'b1;
+        finstr.instr = instr;
+        finstr.pc    = pc;
+        stall        = 1'b0;
+        @(posedge clk);   // D register capture: the instruction is now in E
+        #1;
+        finstr.valid = 1'b0;
+        chk1("trap_req",   trap_req,   1'b1);
+        chk ("trap_cause", trap_cause, cause);
+        chk ("trap_tval",  trap_tval,  tval);
+        chk ("trap_pc",    trap_pc,    pc);
+        @(posedge clk);
+        #1;
+        chk1("no_commit",  einstr.valid, 1'b0);
+    endtask
+
     // =======================================================================
     //  Stimulus
     // =======================================================================
@@ -184,7 +196,7 @@ module anv32_decode_execute_c1_tb
         xreg[3] = 32'hFFFFFFFF;      // -1
         xreg[4] = 32'd1;
         xreg[5] = 32'hFFFFFFF0;      // -16
-        xreg[6] = 32'h00001001;      // for JALR LSB-clear test
+        xreg[6] = 32'h00001003;      // for JALR LSB-clear test
         xreg[7] = 32'h00000F0F;      // for CSR write tests
 
         finstr = '0;
@@ -274,14 +286,14 @@ module anv32_decode_execute_c1_tb
         // --------------------------------------------------------------
         //  Loads / stores: address = rs1 + imm
         // --------------------------------------------------------------
-        run("LW", enc_i(12'd8, 5'd1, F3_LW, 5'd10, OPC_LOAD), 32'h0);
-        chk ("addr(alu)",  einstr.alu_result, 32'd18);    // 10 + 8
+        run("LW", enc_i(12'd10, 5'd1, F3_LW, 5'd10, OPC_LOAD), 32'h0);
+        chk ("addr(alu)",  einstr.alu_result, 32'd20);    // 10 + 10
         chk1("is_mem",     einstr.is_mem,     1'b1);
         chk1("rd_valid",   einstr.rd_valid,   1'b1);
         chk_wb("wb_sel",   einstr.wb_sel,     WB_MEM);
 
-        run("SW", enc_s(12'd16, 5'd2, 5'd1, F3_SW, OPC_STORE), 32'h0);
-        chk ("addr(alu)",  einstr.alu_result, 32'd26);    // 10 + 16
+        run("SW", enc_s(12'd18, 5'd2, 5'd1, F3_SW, OPC_STORE), 32'h0);
+        chk ("addr(alu)",  einstr.alu_result, 32'd28);    // 10 + 18
         chk ("write_data", einstr.write_data, 32'd3);     // rs2 = x2
         chk1("is_mem",     einstr.is_mem,     1'b1);
         chk1("rd_valid",   einstr.rd_valid,   1'b0);
@@ -317,9 +329,9 @@ module anv32_decode_execute_c1_tb
         chk1("is_pc_chg",  einstr.is_pc_changer, 1'b1);
         chk1("rd_valid",   einstr.rd_valid,  1'b1);
 
-        // JALR target = (rs1 + imm) & ~1 ; here 0x1001 + 2 = 0x1003 -> 0x1002
+        // JALR target = (rs1 + imm) & ~1 ; here 0x1003 + 2 = 0x1005 -> 0x1004
         run("JALR", enc_i(12'd2, 5'd6, F3_JALR, 5'd10, OPC_JALR), 32'h300);
-        chk ("pc_target",  einstr.pc_target, 32'h1002);   // LSB cleared
+        chk ("pc_target",  einstr.pc_target, 32'h1004);   // LSB cleared
         chk ("link_pc",    einstr.link_pc,   32'h304);
         chk_wb("wb_sel",   einstr.wb_sel,    WB_PC4);
 
@@ -329,7 +341,7 @@ module anv32_decode_execute_c1_tb
         run("CSRRW", enc_i(CSR_MSTATUS, 5'd7, F3_CSRRW, 5'd10, OPC_SYSTEM), 32'h400);
         chk ("alu_result", einstr.alu_result, 32'hCAFE_BABE);
         chk ("csr_addr",   einstr.csr_addr,   CSR_MSTATUS);
-        chk ("csr_wdata",  einstr.csr_wdata,  32'h00000F0F);
+        chk ("csr_wdata",  einstr.csr_wdata,  32'h00001808); // mstatus WARL: MIE, MPP=M
         chk1("is_csr",     einstr.is_csr,     1'b1);
         chk1("csr_we",     einstr.csr_we,     1'b1);
         chk1("rd_valid",   einstr.rd_valid,   1'b1);
@@ -345,10 +357,32 @@ module anv32_decode_execute_c1_tb
         chk1("csr_we",     einstr.csr_we,     1'b1);
 
         // --------------------------------------------------------------
-        //  Illegal instruction -> valid = 0
+        //  Exceptions raised in E: the instruction traps and never
+        //  reaches M (einstr stays empty)
         // --------------------------------------------------------------
-        run("ILLEGAL", 32'hFFFFFFFF, 32'h0);
-        chk1("valid", einstr.valid, 1'b0);
+        run_trap("ILLEGAL", 32'hFFFFFFFF, 32'h0, 32'd2, 32'hFFFFFFFF);
+        run_trap("ECALL", 32'h00000073, 32'h40, 32'd11, 32'h0);
+        run_trap("EBREAK", 32'h00100073, 32'h44, 32'd3, 32'h44);
+        run_trap("LW_MISAL", enc_i(12'd9, 5'd1, F3_LW, 5'd10, OPC_LOAD), 32'h0,
+                 32'd4, 32'd19);
+        run_trap("SH_MISAL", enc_s(12'd1, 5'd2, 5'd1, F3_SH, OPC_STORE), 32'h0,
+                 32'd6, 32'd11);
+        run_trap("JALR_MISAL", enc_i(12'hFFF, 5'd6, F3_JALR, 5'd10, OPC_JALR), 32'h300,
+                 32'd0, 32'h1002);
+        run_trap("BEQ_MISAL", enc_b(13'd18, 5'd1, 5'd1, F3_BEQ, OPC_BRANCH), 32'h100,
+                 32'd0, 32'h112);
+        run_trap("CSR_NONE", enc_i(12'h7C0, 5'd0, F3_CSRRS, 5'd10, OPC_SYSTEM), 32'h0,
+                 32'd2, enc_i(12'h7C0, 5'd0, F3_CSRRS, 5'd10, OPC_SYSTEM));
+        run_trap("CSR_RO_WR", enc_i(CSR_MHARTID, 5'd7, F3_CSRRW, 5'd0, OPC_SYSTEM), 32'h0,
+                 32'd2, enc_i(CSR_MHARTID, 5'd7, F3_CSRRW, 5'd0, OPC_SYSTEM));
+
+        // Not-taken branch to a misaligned target and a read-only CSR read
+        // are fine
+        run("BEQ_N_MISAL", enc_b(13'd18, 5'd2, 5'd1, F3_BEQ, OPC_BRANCH), 32'h100);
+        chk1("valid", einstr.valid, 1'b1);
+        run("CSR_RO_RD", enc_i(CSR_MHARTID, 5'd0, F3_CSRRS, 5'd10, OPC_SYSTEM), 32'h0);
+        chk1("valid", einstr.valid, 1'b1);
+        chk1("csr_we", einstr.csr_we, 1'b0);
 
         // --------------------------------------------------------------
         //  Stall injects a bubble so an older load can advance to M/W while

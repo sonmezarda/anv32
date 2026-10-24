@@ -37,7 +37,7 @@ module i2c_byte_master_timed #(
 
     typedef enum logic [1:0] {
         PH_LOW, 
-        PH_WAIT_HIGH, // scl released, wait until be 1
+        PH_WAIT_HIGH, // SCL released, wait until it reads high
         PH_HIGH
     } phase_t;
 
@@ -177,15 +177,15 @@ module i2c_byte_master_timed #(
                                 phase_cnt_q     <= 32'd0;
                                 stretch_cnt_q   <= 32'd0;
                                 phase_q         <= PH_WAIT_HIGH;
-                            end else begin // still low phase 
+                            end else begin // still in low phase
                                 phase_cnt_q <= phase_cnt_q + 32'd1;
                             end
                         end
 
                         PH_WAIT_HIGH: begin
-                            scl_drive_low_q <= 1'b0; // release scl
+                            scl_drive_low_q <= 1'b0; // release SCL
 
-                            if(scl_i == 1'b1) begin // if scl_io realy released
+                            if(scl_i == 1'b1) begin // SCL actually released (no clock stretching)
                                 phase_cnt_q   <= 32'd0;
                                 stretch_cnt_q <= 32'd0;
                                 phase_q       <= PH_HIGH; 
@@ -202,7 +202,7 @@ module i2c_byte_master_timed #(
                         PH_HIGH: begin
                             scl_drive_low_q <= 1'b0;
 
-                            if(!sda_drive_low_q && (sda_i == 1'b0)) begin // SDA released but its still low
+                            if(!sda_drive_low_q && (sda_i == 1'b0)) begin // SDA released but still low
                                 arbitration_lost_o <= 1'b1;
                                 sda_drive_low_q    <= 1'b0;
                                 state_q            <= ST_IDLE;

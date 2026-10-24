@@ -22,4 +22,7 @@ package anv32_nn_regs_pkg;
     localparam int unsigned NN_CONTROL_START_BIT     = 0;
     localparam int unsigned NN_CONTROL_CLEAR_BIT     = 1;
 
+    localparam int unsigned NN_CONFIG_RELU_BIT       = 0;
+    localparam int unsigned NN_CONFIG_IRQ_ENABLE_BIT = 1;
+
 endpackage

@@ -5,7 +5,7 @@
 #define QMC5883L_ADDR 0x0du
 #define I2C_WAIT_LIMIT 2000000u
 
-// #section UART HELPER 
+// UART helpers
 static void uart_putc(char c)
 {
     while ((ANV32_UART0_STATUS & ANV32_UART_STATUS_TX_READY) == 0u) {
@@ -43,7 +43,7 @@ static void uart_puthex32(unsigned int v)
     uart_puthex16(v >> 16);
     uart_puthex16(v);
 }
-// #endregion
+
 static void i2c_clear_status(void)
 {
     ANV32_I2C0_CTRL = ANV32_I2C_CTRL_CLEAR;

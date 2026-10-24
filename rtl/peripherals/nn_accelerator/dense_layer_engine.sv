@@ -123,7 +123,7 @@ module dense_layer_engine (
     assign activated_result =
         (relu_enable_q && biased_result[31]) ? 32'sd0 : biased_result;
 
-    memory_dot_product_stream dot_engine (
+    mem_dot_product_stream dot_engine (
         .clk_i              (clk_i),
         .rst_i              (rst_i),
 

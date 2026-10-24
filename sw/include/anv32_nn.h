@@ -25,6 +25,9 @@
 #define ANV32_NN_CONTROL_START               (1u << 0)
 #define ANV32_NN_CONTROL_CLEAR               (1u << 1)
 
+#define ANV32_NN_CONFIG_RELU                 (1u << 0)
+#define ANV32_NN_CONFIG_IRQ_ENABLE           (1u << 1)
+
 #define ANV32_NN_REG(base, offset)           ANV32_REG32((base) + (offset))
 
 #define ANV32_NN_CONTROL_REG(base)           ANV32_NN_REG((base), ANV32_NN_CONTROL_OFFSET)

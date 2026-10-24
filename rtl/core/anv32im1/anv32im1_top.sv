@@ -22,10 +22,6 @@ module anv32im1_top
     output logic [3:0]      mem_we
 );
 
-// #region INTERNAL SIGNAL DEFINES
-
-
-
     logic [XLEN-1:0] fetch_addr;
 
     logic [XLEN-1:0]        dmem_wdata;
@@ -63,21 +59,21 @@ module anv32im1_top
     logic [XLEN-1:0]        e_pc_target;
     logic                   e_pc_changer, e_valid;
 
-    // muldiv stall (E stage'den, HAS_M=0'da sabit 0)
-    logic                   e_mul_div_stall, md_stall;
+    // mul/div stall from E (tied to 0 when HAS_M=0)
+    logic                   e_mul_div_stall, md_stall, e_div_busy;
+    logic                   csr_cnt_stall;
 
     // E stage trap out
     logic                   trap_req;
     logic [XLEN-1:0]        trap_pc, trap_cause, trap_tval;
     logic                   mret_req;
     logic [XLEN-1:0]        trap_target, mret_target;
-    logic                   irq_pending, irq_req;
+    logic                   irq_pending, irq_req, irq_csr_hazard;
+    logic                   csr_serialize;
     logic [XLEN-1:0]        irq_pc;
     logic                   csr_trap;
     logic [XLEN-1:0]        csr_trap_pc, csr_trap_cause, csr_trap_tval;
 
-// #endregion
-   
     assign mem_wdata_o  = dmem_wdata;
     assign mem_addr_o   = m_stage_dmem_addr_out;
     assign mem_valid_o  = dmem_valid;
@@ -119,7 +115,14 @@ module anv32im1_top
         end
     end
 
-    assign irq_req = irq_pending && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i;
+    // Hold off interrupts while a write to mstatus/mie is still in M or W.
+    // Otherwise an IRQ could be taken after the instruction that disabled it.
+    assign irq_csr_hazard =
+        (einstr.valid && einstr.is_csr && einstr.csr_we &&
+         (einstr.csr_addr == CSR_MSTATUS || einstr.csr_addr == CSR_MIE)) ||
+        (csr_we && (csr_waddr == CSR_MSTATUS || csr_waddr == CSR_MIE));
+
+    assign irq_req = irq_pending && !irq_csr_hazard && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i;
 
     always_comb begin : csr_trap_mux_comb
         csr_trap       = trap_req || irq_req;
@@ -127,6 +130,14 @@ module anv32im1_top
         csr_trap_cause = trap_req ? trap_cause : MCAUSE_MACHINE_EXTERNAL_IRQ;
         csr_trap_tval  = trap_req ? trap_tval  : '0;
     end
+
+    // A write to mstatus/mie changes which interrupts are enabled. Refetch
+    // everything after it so younger instructions only reach E once the write
+    // has landed and the interrupt condition has been re-evaluated.
+    assign csr_serialize =
+        dinstr.valid && dinstr.is_csr &&
+        (dinstr.csr_addr == CSR_MSTATUS || dinstr.csr_addr == CSR_MIE) &&
+        (dinstr.csr_op == CSR_OP_RW || dinstr.rs1_idx != 5'd0);
 
     always_comb begin : pc_jump_comb
         if (pc_jmp_en_i) begin
@@ -141,26 +152,32 @@ module anv32im1_top
         end else if (irq_req) begin
             pc_jmp_en   = 1'b1;
             pc_jmp_addr = trap_target;
+        end else if (csr_serialize) begin
+            pc_jmp_en   = 1'b1;
+            pc_jmp_addr = dinstr.pc + 32'd4;
         end else begin
             pc_jmp_en   = e_branch_taken && e_valid && e_pc_changer;
             pc_jmp_addr = e_pc_target;
         end
     end
 
-    // --- stall routing: multi-cycle E stalls upstream while M/W drain ---
+    // Stall routing: a multi-cycle E op stalls upstream while M/W drain
     assign md_stall    = e_mul_div_stall;            // HAS_M=0 -> execute tie-off 0
 
     assign stall_e     = md_stall;
-    assign stall_f_eff = stall_i || stall_f || md_stall;
-    assign stall_d_eff = stall_i || stall_d || md_stall;
+    // A counter read (mcycle/minstret and their aliases) waits in D until
+    // every older instruction has retired, so minstret counts all of them.
+    assign csr_cnt_stall =
+        dinstr_decode.valid && dinstr_decode.is_csr && csr_is_counter(dinstr_decode.csr_addr) &&
+        (dinstr.valid || einstr.valid || minstr.valid || e_div_busy);
+
+    assign stall_f_eff = stall_i || stall_f || md_stall || csr_cnt_stall;
+    assign stall_d_eff = stall_i || stall_d || md_stall || csr_cnt_stall;
     assign stall_e_eff = stall_i || stall_e;
     assign stall_m_eff = stall_i;
     assign stall_w_eff = stall_i;
 
     anv32_hazard_basic hazard_unit(
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .stall_i(1'b0),
         .branch_taken_i(pc_jmp_en),
         .dinstr_d_i(dinstr_decode),
         .dinstr_e_i(dinstr),
@@ -232,6 +249,10 @@ module anv32im1_top
 
     anv32_decode_c1 #(.HAS_M(HAS_M)) D(
         .clk_i(clk_i),
+        .hold_i(stall_i),
+        .rs1_hold_i(rs1_E_din),
+        .rs2_hold_i(rs2_E_din),
+        .csr_hold_i(csr_rdata_E),
         .rst_i(rst_i),
         .flush_i(flush_D),
         .stall_i(stall_d_eff),
@@ -255,11 +276,13 @@ module anv32im1_top
         .rs1_rdata_i(rs1_E_din),
         .rs2_rdata_i(rs2_E_din),
         .csr_rdata_i(csr_rdata_E),
+        .branch_taken_i(e_branch_taken),
         .pc_target_o(e_pc_target),
         .pc_changer_o(e_pc_changer),
         .valid_o(e_valid),
         .einstr_o(einstr),
         .mul_div_stall_o(e_mul_div_stall),
+        .div_busy_o(e_div_busy),
         .trap_req_o(trap_req),
         .trap_pc_o(trap_pc),
         .trap_cause_o(trap_cause),
@@ -306,7 +329,7 @@ module anv32im1_top
         .rs2_rdata_o(rs2_rdata)
     );
 
-    anv32_csr csr (
+    anv32_csr #(.MISA_VALUE(MISA_MXL32 | MISA_I | (HAS_M ? MISA_M : '0))) csr (
         .clk_i        (clk_i),
         .rst_i        (rst_i),
         .csr_raddr_i  (csr_addr),
@@ -314,6 +337,7 @@ module anv32im1_top
         .csr_we_i     (csr_we),
         .csr_waddr_i  (csr_waddr),
         .csr_wdata_i  (csr_wdata),
+        .retire_i     (minstr.valid && !stall_w_eff),
         .ext_irq_i    (ext_irq_i),
         .mtvec_o      (mtvec),
         .mepc_o       (mepc),

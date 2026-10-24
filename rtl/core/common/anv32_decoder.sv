@@ -1,8 +1,5 @@
-// ============================================================================
-// anv32_decoder.sv
-// RV32I (+ optional RV32M) decode stage. Raw 32-bit instruction -> dinstr_t.
-// Shared across core variants; HAS_M selects M-extension decode.
-// ============================================================================
+// RV32I (+ optional RV32M) decoder: raw instruction -> dinstr_t.
+// Shared by all core variants; HAS_M enables M-extension decode.
 module anv32_decoder
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
@@ -11,7 +8,6 @@ module anv32_decoder
 )(
     input  logic [XLEN-1:0] instr_i,   // raw instruction (from memory)
     input  logic [XLEN-1:0] pc_i,      // address of this instruction
-    input  logic [XLEN-1:0] id_i,      // commit-log/diff order no (debug)
     output dinstr_t         dinstr_o
 );
 
@@ -28,10 +24,8 @@ module anv32_decoder
         rs2    = instr_i[24:20];
         funct7 = instr_i[31:25];
 
-        // --- Default: full 0, then build up ---
         dinstr_o         = '0;
         dinstr_o.pc      = pc_i;
-        dinstr_o.id      = id_i;
         dinstr_o.instr   = instr_i;
         dinstr_o.op      = UNKNOWN;
         dinstr_o.rd_idx  = rd;
@@ -76,7 +70,7 @@ module anv32_decoder
                     F3_BGE:  begin dinstr_o.valid = 1'b1; dinstr_o.op = BGE;  end
                     F3_BLTU: begin dinstr_o.valid = 1'b1; dinstr_o.op = BLTU; end
                     F3_BGEU: begin dinstr_o.valid = 1'b1; dinstr_o.op = BGEU; end
-                    default: ; // illegal -> valid stays 0
+                    default: ; // illegal
                 endcase
                 if (dinstr_o.valid) begin
                     dinstr_o.rs1_valid = 1'b1;
@@ -191,28 +185,41 @@ module anv32_decoder
                 end
             end
 
+            // ---- MISC-MEM ----------------------------------------------------
+            // Single in-order hart with no caches: FENCE is a no-op.
+            // FENCE.I (Zifencei) is not supported and stays illegal.
+            OPC_MISC_MEM: begin
+                if (funct3 == F3_FENCE) begin
+                    dinstr_o.valid = 1'b1; dinstr_o.op = FENCE;
+                end
+            end
+
             // ---- SYSTEM (ECALL/EBREAK/CSR) ----------------------------------
             OPC_SYSTEM: begin
-                if (funct3 == F3_SYSTEM) begin
+                // ECALL/EBREAK/MRET need rd = rs1 = 0
+                if (funct3 == F3_SYSTEM && rd == 5'd0 && rs1 == 5'd0) begin
                     unique case (instr_i[31:20])
-                        SYS_ECALL:  begin 
-                            dinstr_o.valid = 1'b1; 
-                            dinstr_o.op = ECALL; 
+                        SYS_ECALL: begin
+                            dinstr_o.valid     = 1'b1;
+                            dinstr_o.op        = ECALL;
                             dinstr_o.exc_valid = 1'b1;
                             dinstr_o.exc_cause = mcause_exception(MCAUSE_ECALL_M);
                             dinstr_o.exc_tval  = '0;
                         end
                         SYS_EBREAK: begin
-                            dinstr_o.valid   = 1'b1; dinstr_o.op = EBREAK;
-                            dinstr_o.is_halt = 1'b1; // sim-stop; becomes a real trap in M4
+                            dinstr_o.valid     = 1'b1;
+                            dinstr_o.op        = EBREAK;
+                            dinstr_o.exc_valid = 1'b1;
+                            dinstr_o.exc_cause = mcause_exception(MCAUSE_BREAKPOINT);
+                            dinstr_o.exc_tval  = pc_i;
                         end
                         SYS_MRET: begin
                             dinstr_o.valid = 1'b1;
                             dinstr_o.op    = MRET;
                         end
-                        default: ; // MRET/WFI/etc -> illegal for now
+                        default: ; // WFI etc. -> illegal
                     endcase
-                end else begin
+                end else if (funct3 != F3_SYSTEM) begin
                     unique case (funct3)
                         F3_CSRRW: begin
                             dinstr_o.valid  = 1'b1;
@@ -250,6 +257,17 @@ module anv32_decoder
                         default: ;
                     endcase
 
+                    // A CSR that does not exist, or a write to a read-only one,
+                    // is an illegal instruction. CSRRS/CSRRC with rs1/zimm = 0
+                    // only read.
+                    if (dinstr_o.valid &&
+                        (!csr_exists(instr_i[31:20]) ||
+                         (csr_read_only(instr_i[31:20]) &&
+                          (dinstr_o.csr_op == CSR_OP_RW || rs1 != 5'd0)))) begin
+                        dinstr_o.valid = 1'b0;
+                        dinstr_o.op    = UNKNOWN;
+                    end
+
                     if (dinstr_o.valid) begin
                         dinstr_o.rd_valid  = 1'b1;
                         dinstr_o.is_csr    = 1'b1;
@@ -260,10 +278,10 @@ module anv32_decoder
                 end
             end
 
-            default: ; // unknown opcode -> illegal (valid 0)
+            default: ; // unknown opcode -> illegal
         endcase
 
-        // --- ALU işlemi: adres/hedef üreten her şey ADD ---
+        // ALU op; address and target calculations use ADD
         unique case (dinstr_o.op)
             SUB:          dinstr_o.alu_op = ALU_SUB;
             SLLI, SLL:    dinstr_o.alu_op = ALU_SLL;
@@ -278,25 +296,25 @@ module anv32_decoder
             default:      dinstr_o.alu_op = ALU_ADD;
         endcase
 
-        // --- A operandı ---
+        // ALU operand A
         unique case (dinstr_o.op)
             AUIPC, JAL, BEQ, BNE, BLT, BGE, BLTU, BGEU: dinstr_o.a_sel = A_PC;
             LUI:                                        dinstr_o.a_sel = A_ZERO;
             default:                                    dinstr_o.a_sel = A_RS1; // JALR, load, store, OP, OP-IMM
         endcase
 
-        // --- B operandı: register-register ops rs2, gerisi imm ---
+        // ALU operand B: rs2 for register-register ops, imm otherwise
         dinstr_o.b_sel = (dinstr_o.op inside
             {ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND}) ? B_RS2 : B_IMM;
 
-        // --- writeback kaynağı ---
+        // writeback source
         unique case (dinstr_o.op)
             LB, LH, LW, LBU, LHU: dinstr_o.wb_sel = WB_MEM;
             JAL, JALR:            dinstr_o.wb_sel = WB_PC4;
             default:              dinstr_o.wb_sel = WB_ALU;
         endcase
         
-        // --- Decode-time classification (pipeline helpers) ------------------
+        // Decode-time classification used by the pipeline
         dinstr_o.is_mem = dinstr_o.valid &&
             (dinstr_o.op inside {LB, LH, LW, LBU, LHU, SB, SH, SW});
         dinstr_o.is_pc_changer = dinstr_o.valid &&
@@ -304,7 +322,7 @@ module anv32_decoder
         dinstr_o.is_muldiv = dinstr_o.valid &&
             (dinstr_o.op inside {MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU});
 
-        // Illegal instruction turns into a real pipeline instruction that traps.
+        // Illegal instructions stay in the pipeline and trap in E.
         if(dinstr_o.op == UNKNOWN) begin 
             dinstr_o.valid     = 1'b1;
             dinstr_o.exc_valid = 1'b1;

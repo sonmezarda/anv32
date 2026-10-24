@@ -8,7 +8,7 @@ module anv32_bram_tdp #(
     input  logic [31:0]       wdata_a,
     input  logic [3:0]        we_a,
     output logic [31:0]       rdata_a,
-    // Port B (fetch: read-only kullanırsan we_b='0)
+    // Port B (fetch: tie we_b to '0 for read-only use)
     input  logic [ADDR_W-1:0] addr_b,
     input  logic [31:0]       wdata_b,
     input  logic [3:0]        we_b,
@@ -27,7 +27,7 @@ module anv32_bram_tdp #(
                 end
             end
 
-            // Port A — no-change (WRITE_MODE = 2'b00): Gowin DPB destekler
+            // Port A: no-change write mode (WRITE_MODE = 2'b00), supported by Gowin DPB
             always_ff @(posedge clk) begin
                 if (we_a[i]) mem[addr_a]       <= wdata_a[i*8 +: 8];
                 else         rdata_a[i*8 +: 8] <= mem[addr_a];

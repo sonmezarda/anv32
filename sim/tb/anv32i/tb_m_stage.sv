@@ -1,17 +1,8 @@
-// ============================================================================
-// anv32_memory_c1_tb.sv
-// Self-checking testbench for the memory stage.
-//
-// Covers:
-//   - reset and pipeline passthrough
-//   - invalid instruction write masking
-//   - SB/SH/SW byte enables and shifted write data
-//   - LB/LBU/LH/LHU/LW load data extraction and extension
-//   - stall hold behavior for minstr_o and mem_rdata_o
-// ============================================================================
+// Memory stage testbench: byte enables, store data alignment, load
+// extension, and stall behavior.
 `timescale 1ns/1ps
 
-module anv32_memory_c1_tb
+module tb_m_stage
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 ;
@@ -269,14 +260,25 @@ module anv32_memory_c1_tb
 
             blocked = mk_einstr(1'b1, ADD, 1'b0, 32'h0000_8000, 32'h0,
                                 32'h0000_8004, 5'd8, 1'b1, WB_ALU);
+            // The memory answers minstr one cycle after the request: this is
+            // the data for the instruction now held in W.
             drive("STALL", blocked, 32'h8765_4321, 1'b1);
+            chk32("rdata", mem_rdata_o, 32'h8765_4321);
             capture();
             chk_minstr(1'b1, 32'h0000_7000, 32'h0000_7004, 5'd7, 1'b1, WB_ALU);
-            chk32("held_rdata", mem_rdata_o, 32'h1234_5678);
+            chk32("held_rdata", mem_rdata_o, 32'h8765_4321);
 
-            drive("STALL_rel", blocked, 32'h8765_4321, 1'b0);
+            // The bus moves on to the blocked request; W keeps the held data
+            drive("STALL_2", blocked, 32'hAAAA_5555, 1'b1);
+            chk32("held_rdata", mem_rdata_o, 32'h8765_4321);
+            capture();
+
+            // W retires in the release cycle, still with the held data
+            drive("STALL_rel", blocked, 32'hAAAA_5555, 1'b0);
+            chk32("held_rdata", mem_rdata_o, 32'h8765_4321);
             capture();
             chk_minstr(1'b1, 32'h0000_8000, 32'h0000_8004, 5'd8, 1'b1, WB_ALU);
+            chk32("next_rdata", mem_rdata_o, 32'hAAAA_5555);
         end
 
         $display("----------------------------------------------------------");

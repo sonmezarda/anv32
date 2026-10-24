@@ -4,6 +4,7 @@
 #include "anv32_mmio.h"
 
 #define ANV32_SYSCTRL_LED_OFFSET        0x000u
+/* Not implemented yet */
 #define ANV32_SYSCTRL_STATUS_OFFSET     0x004u
 #define ANV32_SYSCTRL_BOARD_ID_OFFSET   0x008u
 #define ANV32_SYSCTRL_BUILD_ID_OFFSET   0x00Cu

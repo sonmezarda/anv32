@@ -4,16 +4,14 @@
 #include <stdint.h>
 
 /*
- * Stable target ANV32 memory map.
- *
- * This header intentionally contains only global address regions, peripheral
- * base addresses, and generic MMIO helpers. Register layouts live in the
- * peripheral-specific headers.
+ * ANV32 memory map: global regions, peripheral base addresses and MMIO
+ * helpers. Register layouts live in the per-peripheral headers.
  */
 
 #define ANV32_BRAM_BASE             0x00000000u
-#define ANV32_BRAM_SIZE             0x00010000u
+#define ANV32_BRAM_SIZE             0x00010000u  /* region size; 4 KiB populated today */
 
+/* Reserved, no hardware yet */
 #define ANV32_BOOTROM_BASE          0x00010000u
 #define ANV32_BOOTROM_SIZE          0x00010000u
 
@@ -25,6 +23,7 @@
 #define ANV32_GPIO0_BASE            0x10001000u
 #define ANV32_UART0_BASE            0x10002000u
 #define ANV32_I2C0_BASE             0x10003000u
+/* Reserved slots, no hardware yet */
 #define ANV32_SPI0_BASE             0x10004000u
 #define ANV32_TIMER0_BASE           0x10005000u
 #define ANV32_PWM0_BASE             0x10006000u
@@ -36,9 +35,11 @@
 #define ANV32_NN_SIZE               0x00010000u
 #define ANV32_NN_SCRATCH_BASE       0x10011000u
 
+/* Reserved, no hardware yet */
 #define ANV32_DMA_BASE              0x10020000u
 #define ANV32_DMA_SIZE              0x00010000u
 
+/* External devices and memory, no hardware yet */
 #define ANV32_EXT_DEVICE_BASE       0x20000000u
 #define ANV32_EXT_DEVICE_SIZE       0x10000000u
 

@@ -1,4 +1,6 @@
-module i2c_periph #(
+module i2c_periph
+    import anv32_i2c_regs_pkg::*;
+#(
     parameter int CLK_FREQ               = 27_000_000,
     parameter int CMD_FIFO_DEPTH         = 16,
     parameter int RX_FIFO_DEPTH          = 8,
@@ -22,10 +24,10 @@ module i2c_periph #(
     output logic        irq_o
 );
 
-    localparam logic [4:0] CMD_ADDR    = 5'h00;
-    localparam logic [4:0] STATUS_ADDR = 5'h04;
-    localparam logic [4:0] RXDATA_ADDR = 5'h08;
-    localparam logic [4:0] CTRL_ADDR   = 5'h0c;
+    localparam logic [4:0] CMD_ADDR    = I2C_CMD_OFFSET[4:0];
+    localparam logic [4:0] STATUS_ADDR = I2C_STATUS_OFFSET[4:0];
+    localparam logic [4:0] RXDATA_ADDR = I2C_RXDATA_OFFSET[4:0];
+    localparam logic [4:0] CTRL_ADDR   = I2C_CTRL_OFFSET[4:0];
 
     logic       cmd_valid;
     logic       cmd_ready;
@@ -55,12 +57,12 @@ module i2c_periph #(
 
     assign cmd_valid    = sel_i && write_i && (addr_i == CMD_ADDR);
     assign cmd_op       = wdata_i[2:0];
-    assign cmd_start    = wdata_i[3];
-    assign cmd_stop     = wdata_i[4];
-    assign cmd_ack      = wdata_i[5];
-    assign cmd_data     = wdata_i[15:8];
+    assign cmd_start    = wdata_i[I2C_CMD_START_BIT];
+    assign cmd_stop     = wdata_i[I2C_CMD_STOP_BIT];
+    assign cmd_ack      = wdata_i[I2C_CMD_ACK_BIT];
+    assign cmd_data     = wdata_i[I2C_CMD_DATA_LSB +: 8];
     assign rx_pop       = sel_i && read_i && (addr_i == RXDATA_ADDR);
-    assign clear_errors = sel_i && write_i && (addr_i == CTRL_ADDR) && wdata_i[0];
+    assign clear_errors = sel_i && write_i && (addr_i == CTRL_ADDR) && wdata_i[I2C_CTRL_CLEAR_BIT];
     assign irq_o        = irq_en_q && done_pending_q;
 
     always_comb begin
@@ -70,28 +72,29 @@ module i2c_periph #(
             end
             STATUS_ADDR: begin
                 rdata_o = 32'b0;
-                rdata_o[0]  = busy;
-                rdata_o[1]  = cmd_ready;
-                rdata_o[2]  = rx_valid;
-                rdata_o[3]  = done_pending_q;
-                rdata_o[4]  = bus_owned;
-                rdata_o[5]  = bus_free;
-                rdata_o[6]  = sda_io;
-                rdata_o[7]  = scl_io;
-                rdata_o[16] = nack_error;
-                rdata_o[17] = arbitration_lost;
-                rdata_o[18] = timeout_error;
-                rdata_o[19] = bus_busy_error;
-                rdata_o[20] = rx_overflow;
-                rdata_o[21] = cmd_overflow;
-                rdata_o[22] = illegal_cmd;
-                rdata_o[23] = recovery_failed;
+                rdata_o[I2C_STATUS_BUSY_BIT]      = busy;
+                rdata_o[I2C_STATUS_CMD_READY_BIT] = cmd_ready;
+                rdata_o[I2C_STATUS_RX_VALID_BIT]  = rx_valid;
+                rdata_o[I2C_STATUS_DONE_BIT]      = done_pending_q;
+                rdata_o[I2C_STATUS_BUS_OWNED_BIT] = bus_owned;
+                rdata_o[I2C_STATUS_BUS_FREE_BIT]  = bus_free;
+                rdata_o[I2C_STATUS_SDA_BIT]       = sda_io;
+                rdata_o[I2C_STATUS_SCL_BIT]       = scl_io;
+                rdata_o[I2C_STATUS_NACK_BIT]      = nack_error;
+                rdata_o[I2C_STATUS_ARB_LOST_BIT]  = arbitration_lost;
+                rdata_o[I2C_STATUS_TIMEOUT_BIT]   = timeout_error;
+                rdata_o[I2C_STATUS_BUS_BUSY_BIT]  = bus_busy_error;
+                rdata_o[I2C_STATUS_RX_OVF_BIT]    = rx_overflow;
+                rdata_o[I2C_STATUS_CMD_OVF_BIT]   = cmd_overflow;
+                rdata_o[I2C_STATUS_ILLEGAL_BIT]   = illegal_cmd;
+                rdata_o[I2C_STATUS_REC_FAIL_BIT]  = recovery_failed;
             end
             RXDATA_ADDR: begin
                 rdata_o = {24'b0, rx_data};
             end
             CTRL_ADDR: begin
-                rdata_o = {31'b0, irq_en_q};
+                rdata_o = 32'b0;
+                rdata_o[I2C_CTRL_IRQ_EN_BIT] = irq_en_q;
             end
             default: begin
                 rdata_o = 32'b0;
@@ -113,7 +116,7 @@ module i2c_periph #(
             end
 
             if(sel_i && write_i && (addr_i == CTRL_ADDR)) begin
-                irq_en_q <= wdata_i[1];
+                irq_en_q <= wdata_i[I2C_CTRL_IRQ_EN_BIT];
             end
         end
     end

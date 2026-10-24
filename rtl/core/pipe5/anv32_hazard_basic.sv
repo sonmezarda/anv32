@@ -2,10 +2,6 @@ module anv32_hazard_basic
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 (
-    input  logic clk_i,
-    input  logic rst_i,
-    input  logic stall_i,
-
     input  logic branch_taken_i,
     input  dinstr_t dinstr_d_i, // instr currently in decode
     input  dinstr_t dinstr_e_i, // instr currently in execute
@@ -16,8 +12,6 @@ module anv32_hazard_basic
     output logic stall_F_o,
     output fwd_sel_e rs1_fwd_sel,
     output fwd_sel_e rs2_fwd_sel
-    // output logic flush_F_o,
-    // output logic flush_M_o
 );
     assign flush_D_o = branch_taken_i;
     logic drs1_need_e, drs2_need_e;

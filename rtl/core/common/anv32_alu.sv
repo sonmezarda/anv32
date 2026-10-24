@@ -8,7 +8,7 @@ module anv32_alu
     output logic [XLEN-1:0] result_o
 );
     logic [4:0] shamt;
-    assign shamt = b_i[4:0];   // SLLI'de b=imm[4:0], SLL'de b=rs2[4:0] — ikisi de doğru
+    assign shamt = b_i[4:0];   // imm[4:0] for SLLI, rs2[4:0] for SLL
 
     always_comb begin
         unique case (op_i)
