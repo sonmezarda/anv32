@@ -1,0 +1,58 @@
+[
+  {
+    "name": "trap_ecall",
+    "src": "sw/tests/trap_ecall.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 2000
+  },
+  {
+    "name": "trap_illegal",
+    "src": "sw/tests/trap_illegal.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 2000
+  },
+  {
+    "name": "csr_rw",
+    "src": "sw/tests/csr_rw.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 2000
+  },
+  {
+    "name": "mem_access",
+    "src": "sw/tests/mem_access.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 2000
+  },
+  {
+    "name": "irq_basic",
+    "src": "sw/tests/irq_basic.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 5000
+  },
+  {
+    "name": "irq_sweep",
+    "src": "sw/tests/irq_sweep.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 60000
+  },
+  {
+    "name": "irq_critical",
+    "src": "sw/tests/irq_critical.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 100000
+  },
+  {
+    "name": "muldiv",
+    "src": "sw/tests/muldiv.S",
+    "march": "rv32im_zicsr",
+    "requires": ["m"],
+    "max_cycles": 10000
+  },
+  {
+    "name": "irq_div",
+    "src": "sw/tests/irq_div.S",
+    "march": "rv32im_zicsr",
+    "requires": ["m"],
+    "max_cycles": 200000
+  }
+]

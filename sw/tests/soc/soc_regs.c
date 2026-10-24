@@ -1,0 +1,59 @@
+/*
+ * Register read-back and reset values for the implemented peripherals.
+ */
+#include <stdint.h>
+
+#include "anv32_i2c.h"
+#include "anv32_nn.h"
+#include "anv32_uart.h"
+#include "soc_test.h"
+
+int main(void)
+{
+    /* UART: default baud, TX idle and empty, RX empty */
+    CHECK(ANV32_UART0_BAUD == 115200u, 2);
+    ANV32_UART0_BAUD = 1000000u;
+    CHECK(ANV32_UART0_BAUD == 1000000u, 3);
+    CHECK((ANV32_UART0_STATUS & ANV32_UART_STATUS_TX_READY) != 0u, 4);
+    CHECK((ANV32_UART0_STATUS & ANV32_UART_STATUS_TX_EMPTY) != 0u, 5);
+    CHECK((ANV32_UART0_STATUS & ANV32_UART_STATUS_RX_EMPTY) != 0u, 6);
+    CHECK((ANV32_UART0_STATUS & ANV32_UART_STATUS_RX_VALID) == 0u, 7);
+    CHECK(ANV32_UART0_ERROR == 0u, 8);
+
+    /* I2C: idle bus with pull-ups, IRQ enable reads back at its own bit */
+    CHECK((ANV32_I2C0_STATUS & ANV32_I2C_STATUS_BUSY) == 0u, 10);
+    CHECK((ANV32_I2C0_STATUS & ANV32_I2C_STATUS_CMD_READY) != 0u, 11);
+    CHECK((ANV32_I2C0_STATUS & ANV32_I2C_STATUS_SDA) != 0u, 12);
+    CHECK((ANV32_I2C0_STATUS & ANV32_I2C_STATUS_SCL) != 0u, 13);
+    CHECK((ANV32_I2C0_STATUS & ANV32_I2C_STATUS_ERROR) == 0u, 14);
+    ANV32_I2C0_CTRL = ANV32_I2C_CTRL_IRQ_EN;
+    CHECK(ANV32_I2C0_CTRL == ANV32_I2C_CTRL_IRQ_EN, 15);
+    ANV32_I2C0_CTRL = 0u;
+    CHECK(ANV32_I2C0_CTRL == 0u, 16);
+
+    /* NN: configuration registers read back, idle after reset */
+    ANV32_NN_INPUT_BASE = 0x10u;
+    ANV32_NN_WEIGHT_BASE = 0x20u;
+    ANV32_NN_BIAS_BASE = 0x30u;
+    ANV32_NN_OUTPUT_BASE = 0x40u;
+    ANV32_NN_INPUT_LEN_WORDS = 5u;
+    ANV32_NN_OUTPUT_COUNT = 6u;
+    ANV32_NN_CONFIG = ANV32_NN_CONFIG_RELU | ANV32_NN_CONFIG_IRQ_ENABLE;
+    CHECK(ANV32_NN_INPUT_BASE == 0x10u, 20);
+    CHECK(ANV32_NN_WEIGHT_BASE == 0x20u, 21);
+    CHECK(ANV32_NN_BIAS_BASE == 0x30u, 22);
+    CHECK(ANV32_NN_OUTPUT_BASE == 0x40u, 23);
+    CHECK(ANV32_NN_INPUT_LEN_WORDS == 5u, 24);
+    CHECK(ANV32_NN_OUTPUT_COUNT == 6u, 25);
+    CHECK(ANV32_NN_CONFIG == (ANV32_NN_CONFIG_RELU | ANV32_NN_CONFIG_IRQ_ENABLE), 26);
+    CHECK((ANV32_NN_STATUS & ANV32_NN_STATUS_IRQ_ENABLE) != 0u, 27);
+    CHECK((ANV32_NN_STATUS & ANV32_NN_STATUS_BUSY) == 0u, 28);
+    ANV32_NN_CONFIG = 0u;
+
+    /* SYSCTRL LED reads back */
+    ANV32_SYSCTRL_LED = 0x9u;
+    CHECK(ANV32_SYSCTRL_LED == 0x9u, 30);
+
+    test_pass();
+    return 0;
+}

@@ -1,0 +1,7 @@
+[
+  { "name": "soc_regs",          "src": "sw/tests/soc/soc_regs.c",          "max_cycles": 20000 },
+  { "name": "soc_unmapped",      "src": "sw/tests/soc/soc_unmapped.c",      "max_cycles": 20000 },
+  { "name": "soc_uart_loopback", "src": "sw/tests/soc/soc_uart_loopback.c", "max_cycles": 100000 },
+  { "name": "soc_gpio_irq",      "src": "sw/tests/soc/soc_gpio_irq.c",      "max_cycles": 50000 },
+  { "name": "soc_nn_smoke",      "src": "sw/fpga/nn_accel_smoke.c",         "max_cycles": 20000 }
+]

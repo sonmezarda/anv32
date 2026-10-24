@@ -68,6 +68,10 @@ BENCH_OUT_DIR ?= build/bench
 BENCH_FMAX_JSON ?=
 BENCH_FMAX ?=
 BENCH_OPT ?= -Os
+TEST_CORES ?= anv32i1,anv32im1,anv32im2
+TEST_SUITES ?= core,soc
+TEST_NAMES ?= all
+TEST_OUT_DIR ?= build/core_tests
 ASM_HARD_CYCLES ?= 180
 ASM_HARD_SPIKE_INSNS ?= 180
 ASM_HARD_TESTS ?= \
@@ -274,7 +278,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace core-tests riscv-tests arch-test check bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -532,6 +536,26 @@ mem-ready-trace:
 		$(SRC_mem_ready_trace); \
 	$(OBJ_DIR)/Vtb_mem_ready_stall
 
+core-tests:
+	$(PYTHON) tools/run_core_tests.py \
+		--cores "$(TEST_CORES)" \
+		--suites "$(TEST_SUITES)" \
+		--tests "$(TEST_NAMES)" \
+		--out-dir "$(TEST_OUT_DIR)"
+
+# Official RISC-V test suites (cloned into build/third_party on first use).
+# riscv-tests are self-checking; riscv-arch-test compares against Spike.
+riscv-tests:
+	$(PYTHON) tools/run_compliance.py --cores "$(TEST_CORES)" --suites rv32ui,rv32um,rv32mi
+
+arch-test:
+	$(PYTHON) tools/run_compliance.py --cores "$(TEST_CORES)" \
+		--suites arch-I,arch-M,arch-privilege --spike "$(SPIKE)"
+
+# Everything that runs without Spike or hardware: unit tests, core/SoC tests,
+# riscv-tests and the benchmark self-checks.
+check: all core-tests riscv-tests bench
+
 bench:
 	@args=( \
 		--cores "$(BENCH_CORES)" \
@@ -678,6 +702,12 @@ help:
 	@echo "  make asm-diff-test ASM=file.S"
 	@echo "                       Diff Spike golden commit log against the core"
 	@echo "  make asm-hard-test  Run the RV32I hard assembly diff suite"
+	@echo "  make core-tests     Run the self-checking core and SoC tests (sw/tests)"
+	@echo "  make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep"
+	@echo "                       Select cores and tests (TEST_SUITES=core,soc)"
+	@echo "  make riscv-tests    Run riscv-tests (rv32ui/um/mi) on all cores"
+	@echo "  make arch-test      Run riscv-arch-test, compared against Spike"
+	@echo "  make check          Unit + core/SoC tests + riscv-tests + benchmarks"
 	@echo "  make bench          Run synthetic performance benchmarks on all cores"
 	@echo "  make bench BENCHMARKS=balanced BENCH_CORES=anv32im2"
 	@echo "                       Select benchmark names/tags and cores"

@@ -96,7 +96,7 @@ CORE_DEFINES = {
 CORE_FEATURES = {
     "anv32i1": set(),
     "anv32im1": {"m"},
-    "anv32im2": {"m"},
+    "anv32im2": {"m", "mem_ready"},
 }
 
 RESULT_RE = re.compile(r"^BENCH_RESULT\s+(?P<body>.*)$")
