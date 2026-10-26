@@ -38,9 +38,10 @@ nested interrupts, a debug module, accelerator interfaces.
 
 ## SoC
 
-- A small valid/ready peripheral bus, with BRAM, UART, I2C, GPIO and the NN
-  accelerator behind slave wrappers instead of direct decode in the SoC top
-- Bus errors reported back to the core as access faults
+- Access faults for addresses with no slave behind them, checked in the core
+  so the trap is precise
+- I2C0 on the shared register front end, so it gets the atomic aliases too
+- AXI-Lite bridge for Zynq (PYNQ-Z2) and for the Linux-capable core
 - GPIO, SPI, timer, PWM, watchdog and a second UART. The address slots and,
   for GPIO and SYSCTRL, the register layouts are already defined; see
   [memory_map.md](memory_map.md#register-status).

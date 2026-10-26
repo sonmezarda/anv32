@@ -1,9 +1,6 @@
 module anv32_soc_top
+    import anv32_bus_pkg::*;
     import anv32_soc_addr_pkg::*;
-    import anv32_sysctrl_regs_pkg::*;
-    import anv32_gpio_regs_pkg::*;
-    import anv32_uart_regs_pkg::*;
-    import anv32_i2c_regs_pkg::*;
 #(
     parameter int unsigned CORE_TYPE   = 2,
     parameter int unsigned BRAM_ADDR_W = 10,
@@ -23,24 +20,34 @@ module anv32_soc_top
     localparam int unsigned CORE_ANV32IM1 = 1;
     localparam int unsigned CORE_ANV32IM2 = 2;
 
-    localparam logic [31:0] LED_ADDR              = SYSCTRL_BASE + SYSCTRL_LED_OFFSET;
-    localparam logic [31:0] GPIO_IRQ_PENDING_ADDR = GPIO0_BASE + GPIO_IRQ_PENDING_OFFSET;
-    localparam logic [31:0] UART_TXDATA_ADDR      = UART0_BASE + UART_TXDATA_OFFSET;
-    localparam logic [31:0] UART_STATUS_ADDR      = UART0_BASE + UART_STATUS_OFFSET;
-    localparam logic [31:0] UART_BAUD_ADDR        = UART0_BASE + UART_BAUD_OFFSET;
-    localparam logic [31:0] UART_ERROR_ADDR       = UART0_BASE + UART_ERROR_OFFSET;
-    localparam logic [31:0] UART_RXDATA_ADDR      = UART0_BASE + UART_RXDATA_OFFSET;
-    localparam logic [31:0] I2C_BASE_ADDR         = I2C0_BASE;
-    localparam logic [31:0] NN_ACCEL_BASE_ADDR    = NN_BASE;
+    // Fast bus: zero wait states. GPIO0 sits inside the MMIO region but comes
+    // first, so it is decoded here instead of behind the peripheral bridge.
+    localparam int unsigned FAST_GPIO   = 0;
+    localparam int unsigned FAST_BRAM   = 1;
+    localparam int unsigned FAST_NN     = 2;
+    localparam int unsigned FAST_PERIPH = 3;
+    localparam int unsigned FAST_N      = 4;
+    localparam logic [FAST_N-1:0][31:0] FAST_BASE =     // index 3 .. 0
+        {MMIO_BASE, NN_BASE, BRAM_BASE, GPIO0_BASE};
+    localparam logic [FAST_N-1:0][31:0] FAST_MASK =
+        {~(MMIO_SIZE - 1), ~(NN_SIZE - 1), ~(BRAM_SIZE - 1), ~(MMIO_SLOT_SIZE - 1)};
+
+    // Peripheral bus: behind a register slice, one extra cycle per access
+    localparam int unsigned PERIPH_SYSCTRL = 0;
+    localparam int unsigned PERIPH_UART    = 1;
+    localparam int unsigned PERIPH_I2C     = 2;
+    localparam int unsigned PERIPH_N       = 3;
+    localparam logic [PERIPH_N-1:0][31:0] PERIPH_BASE = // index 2 .. 0
+        {I2C0_BASE, UART0_BASE, SYSCTRL_BASE};
+    localparam logic [PERIPH_N-1:0][31:0] PERIPH_MASK = {PERIPH_N{~(MMIO_SLOT_SIZE - 1)}};
 
     logic rst_i;
     logic [POR_CYCLES-1:0] por_shift = '0;
-    logic [31:0] led_reg;
-    logic        gpio_irq_pending;
 
     logic [31:0] instr_addr;
     logic [31:0] instr_rdata;
 
+    // Core data port
     logic [31:0] mem_addr;
     logic [31:0] mem_wdata;
     logic [31:0] mem_rdata;
@@ -48,203 +55,157 @@ module anv32_soc_top
     logic        mem_ready;
     logic [3:0]  mem_we;
 
+    bus_req_t                   core_req;
+    bus_rsp_t                   core_rsp;
+    bus_req_t [FAST_N-1:0]      fast_req;
+    bus_rsp_t [FAST_N-1:0]      fast_rsp;
+    bus_req_t                   periph_req;
+    bus_rsp_t                   periph_rsp;
+    bus_req_t [PERIPH_N-1:0]    p_req;
+    bus_rsp_t [PERIPH_N-1:0]    p_rsp;
+
     logic [BRAM_ADDR_W-1:0] imem_addr;
     logic [BRAM_ADDR_W-1:0] dmem_addr;
     logic [31:0]            dmem_rdata;
     logic [3:0]             dmem_we;
 
-    logic                   led_sel;
-    logic                   led_write;
-    logic                   gpio_irq_pending_sel;
-    logic                   gpio_irq_pending_clear;
-    logic                   uart_txdata_sel;
-    logic                   uart_status_sel;
-    logic                   uart_baud_sel;
-    logic                   uart_error_sel;
-    logic                   uart_rxdata_sel;
-    logic                   i2c_sel;
-    logic                   uart_tx_write;
-    logic                   uart_baud_write;
-    logic                   uart_error_clear;
-    logic                   uart_rx_read;
-    logic                   i2c_write;
-    logic                   i2c_read;
-    logic                   bram_sel;
-    logic                   bram_sel_q;
-    logic                   mmio_sel;
-    logic                   mmio_sel_q;
-    logic [31:0]            mmio_rdata;
-    logic [31:0]            mmio_rdata_q;
-
-    logic gpio_irq_reg, gpio_irq_reg2, gpio_irq_reg2_q, gpio_irq_rise;
-    logic [31:0] uart_baud_rate;
-    logic        uart_tx_ready;
-    logic        uart_tx_full;
-    logic        uart_tx_empty;
-    logic        uart_tx_busy;
-    logic        uart_tx_done;
-    logic [7:0]  uart_rx_data;
-    logic        uart_rx_valid;
-    logic        uart_rx_empty;
-    logic        uart_rx_full;
-    logic        uart_rx_busy;
-    logic        uart_framing_error;
-    logic        uart_rx_overflow;
-    logic        uart_framing_error_pulse;
-    logic        uart_rx_overflow_pulse;
-    logic [31:0] uart_status;
-    logic [31:0] uart_error;
-    logic [31:0] i2c_rdata;
+    logic [31:0] led_reg;
+    logic        gpio_irq_pending;
     logic        i2c_irq;
+    logic        nn_accel_irq;
+    logic        external_irq;
+
     logic        nn_accel_hit;
     logic        nn_accel_ready;
     logic [31:0] nn_accel_rdata;
+    logic [31:0] nn_rdata_q;
     logic        nn_scratch_sel;
     logic        nn_scratch_sel_q;
     logic [31:0] nn_scratch_rdata;
-    logic        nn_accel_irq;
-    logic        external_irq;
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_shift <= '0;
         else          por_shift <= {por_shift[POR_CYCLES-2:0], 1'b1};
     end
 
-    assign rst_i = ~por_shift[POR_CYCLES-1];
-    assign debug_leds = ~led_reg[3:0];
-    assign imem_addr = instr_addr[BRAM_ADDR_W+1:2];
-    assign dmem_addr = mem_addr[BRAM_ADDR_W+1:2];
-
-    assign led_sel = mem_valid && (mem_addr == LED_ADDR);
-    assign gpio_irq_pending_sel = mem_valid && (mem_addr == GPIO_IRQ_PENDING_ADDR);
-    assign uart_txdata_sel = mem_valid && (mem_addr == UART_TXDATA_ADDR);
-    assign uart_status_sel = mem_valid && (mem_addr == UART_STATUS_ADDR);
-    assign uart_baud_sel   = mem_valid && (mem_addr == UART_BAUD_ADDR);
-    assign uart_error_sel  = mem_valid && (mem_addr == UART_ERROR_ADDR);
-    assign uart_rxdata_sel = mem_valid && (mem_addr == UART_RXDATA_ADDR);
-    assign i2c_sel = mem_valid && (mem_addr[31:5] == I2C_BASE_ADDR[31:5]);
-    assign mmio_sel = led_sel || gpio_irq_pending_sel || uart_txdata_sel ||
-                      uart_status_sel || uart_baud_sel || uart_error_sel ||
-                      uart_rxdata_sel || i2c_sel || nn_accel_hit;
-
-    assign led_write = led_sel && mem_ready && (mem_we != 4'b0);
-    assign gpio_irq_pending_clear = gpio_irq_pending_sel && mem_ready && (mem_we != 4'b0) && mem_wdata[0];
-    assign uart_tx_write    = uart_txdata_sel && mem_ready && (mem_we != 4'b0);
-    assign uart_baud_write  = uart_baud_sel && mem_ready && (mem_we != 4'b0);
-    assign uart_error_clear = uart_error_sel && mem_ready && (mem_we != 4'b0) && mem_wdata[0];
-    assign uart_rx_read     = uart_rxdata_sel && mem_ready && (mem_we == 4'b0);
-    assign i2c_write = i2c_sel && mem_ready && (mem_we != 4'b0);
-    assign i2c_read  = i2c_sel && mem_ready && (mem_we == 4'b0);
-
-    assign mem_ready = nn_accel_hit ? nn_accel_ready : 1'b1;
-    // Only addresses inside the BRAM region reach the RAM. Anything else that is
-    // not a peripheral (reserved slots, unimplemented registers) ignores writes
-    // and reads as zero instead of aliasing onto RAM.
-    assign bram_sel = mem_valid && !mmio_sel &&
-                      ((mem_addr & ~(BRAM_SIZE - 1)) == BRAM_BASE);
-    assign dmem_we = (bram_sel && mem_ready) ? mem_we : 4'b0;
-
-    always_comb begin
-        uart_status = '0;
-        uart_status[UART_STATUS_TX_READY] = uart_tx_ready;
-        uart_status[UART_STATUS_TX_EMPTY] = uart_tx_empty;
-        uart_status[UART_STATUS_TX_BUSY]  = uart_tx_busy;
-        uart_status[UART_STATUS_TX_DONE]  = uart_tx_done;
-        uart_status[UART_STATUS_RX_VALID] = uart_rx_valid;
-        uart_status[UART_STATUS_RX_EMPTY] = uart_rx_empty;
-        uart_status[UART_STATUS_RX_FULL]  = uart_rx_full;
-        uart_status[UART_STATUS_RX_BUSY]  = uart_rx_busy;
-
-        uart_error = '0;
-        uart_error[UART_ERROR_FRAMING]  = uart_framing_error;
-        uart_error[UART_ERROR_OVERFLOW] = uart_rx_overflow;
-    end
-
-    assign mmio_rdata = led_sel ? led_reg :
-                        gpio_irq_pending_sel ? {31'b0, gpio_irq_pending} :
-                        uart_status_sel ? uart_status :
-                        uart_baud_sel ? uart_baud_rate :
-                        uart_error_sel ? uart_error :
-                        uart_rxdata_sel ? {24'b0, uart_rx_data} :
-                        i2c_sel ? i2c_rdata :
-                        nn_accel_hit ? nn_accel_rdata :
-                        32'b0;
-    // NN scratch reads bypass the registered MMIO mux: the scratch BRAM output
-    // is already registered, so the data is valid exactly one cycle after the
-    // request, matching the data-BRAM timing.
-    assign mem_rdata = nn_scratch_sel_q ? nn_scratch_rdata :
-                       mmio_sel_q       ? mmio_rdata_q     :
-                       bram_sel_q       ? dmem_rdata       : 32'b0;
-    assign gpio_irq_rise = gpio_irq_reg2 && !gpio_irq_reg2_q;
+    assign rst_i        = ~por_shift[POR_CYCLES-1];
+    assign debug_leds   = ~led_reg[3:0];
     assign external_irq = gpio_irq_pending || nn_accel_irq;
+
+    // ---- Bus fabric ---------------------------------------------------------
+    assign core_req.valid = mem_valid;
+    assign core_req.addr  = mem_addr;
+    assign core_req.wdata = mem_wdata;
+    assign core_req.we    = mem_we;
+    assign mem_ready      = core_rsp.ready;
+    assign mem_rdata      = core_rsp.rdata;
+
+    anv32_bus_decoder #(
+        .N   (FAST_N),
+        .BASE(FAST_BASE),
+        .MASK(FAST_MASK)
+    ) fast_bus (
+        .clk_i  (clk_i),
+        .rst_i  (rst_i),
+        .m_req_i(core_req),
+        .m_rsp_o(core_rsp),
+        .s_req_o(fast_req),
+        .s_rsp_i(fast_rsp)
+    );
+
+    anv32_bus_bridge periph_bridge (
+        .clk_i  (clk_i),
+        .rst_i  (rst_i),
+        .m_req_i(fast_req[FAST_PERIPH]),
+        .m_rsp_o(fast_rsp[FAST_PERIPH]),
+        .s_req_o(periph_req),
+        .s_rsp_i(periph_rsp)
+    );
+
+    anv32_bus_decoder #(
+        .N   (PERIPH_N),
+        .BASE(PERIPH_BASE),
+        .MASK(PERIPH_MASK)
+    ) periph_bus (
+        .clk_i  (clk_i),
+        .rst_i  (rst_i),
+        .m_req_i(periph_req),
+        .m_rsp_o(periph_rsp),
+        .s_req_o(p_req),
+        .s_rsp_i(p_rsp)
+    );
+
+    // ---- Fast slaves ----------------------------------------------------------
+    // BRAM: synchronous read, so read data already arrives one cycle later.
+    // Only the low BRAM_ADDR_W bits decode; the rest of the region wraps.
+    assign dmem_addr           = fast_req[FAST_BRAM].addr[BRAM_ADDR_W+1:2];
+    assign dmem_we             = fast_req[FAST_BRAM].valid ? fast_req[FAST_BRAM].we : 4'b0;
+    assign fast_rsp[FAST_BRAM] = '{ready: 1'b1, rdata: dmem_rdata};
+    assign imem_addr           = instr_addr[BRAM_ADDR_W+1:2];
+
+    gpio_periph gpio (
+        .clk_i(clk_i),
+        .rst_i(rst_i),
+        .req_i(fast_req[FAST_GPIO]),
+        .rsp_o(fast_rsp[FAST_GPIO]),
+        .irq_i(gpio_irq_i),
+        .irq_o(gpio_irq_pending)
+    );
+
+    // NN accelerator. Register reads are registered here so they arrive one
+    // cycle later like every other slave; scratch reads come straight from
+    // the scratch BRAM, which is already registered. Parts of the aperture
+    // the accelerator does not decode are accepted and read as zero.
+    nn_accel_periph #(
+        .BASE_ADDR(NN_BASE),
+        .SCRATCH_OFFSET(NN_SCRATCH_BASE - NN_BASE),
+        .SCRATCH_WORDS(4096)
+    ) nn_accel (
+        .clk_i(clk_i),
+        .rst_i(rst_i),
+        .mem_valid_i(fast_req[FAST_NN].valid),
+        .mem_addr_i(fast_req[FAST_NN].addr),
+        .mem_wdata_i(fast_req[FAST_NN].wdata),
+        .mem_we_i(fast_req[FAST_NN].we),
+        .mem_ready_o(nn_accel_ready),
+        .mem_rdata_o(nn_accel_rdata),
+        .mem_hit_o(nn_accel_hit),
+        .scratch_rdata_o(nn_scratch_rdata),
+        .scratch_sel_o(nn_scratch_sel),
+        .irq_o(nn_accel_irq)
+    );
 
     always_ff @(posedge clk_i) begin
         if (rst_i) begin
-            led_reg          <= 32'b0;
-            gpio_irq_reg     <= 1'b0;
-            gpio_irq_reg2    <= 1'b0;
-            gpio_irq_reg2_q  <= 1'b0;
-            gpio_irq_pending <= 1'b0;
-            uart_baud_rate   <= 32'd115200;
-            mmio_sel_q       <= 1'b0;
-            bram_sel_q       <= 1'b0;
-            mmio_rdata_q     <= 32'b0;
             nn_scratch_sel_q <= 1'b0;
-        end else if (led_write) begin
-            led_reg <= mem_wdata;
-        end else if (uart_baud_write) begin
-            uart_baud_rate <= mem_wdata;
-        end
-
-        if (!rst_i) begin
-            mmio_sel_q   <= mmio_sel;
-            bram_sel_q   <= bram_sel;
-            mmio_rdata_q <= mmio_rdata;
+            nn_rdata_q       <= '0;
+        end else begin
             nn_scratch_sel_q <= nn_scratch_sel;
-
-            gpio_irq_reg    <= gpio_irq_i;
-            gpio_irq_reg2   <= gpio_irq_reg;
-            gpio_irq_reg2_q <= gpio_irq_reg2;
-
-            if (gpio_irq_pending_clear) begin
-                gpio_irq_pending <= 1'b0;
-            end
-            if (gpio_irq_rise) begin
-                gpio_irq_pending <= 1'b1;
-            end
+            if (fast_req[FAST_NN].valid) nn_rdata_q <= nn_accel_hit ? nn_accel_rdata : '0;
         end
     end
 
-    uart_top #(
-        .CLK_FREQ      (27_000_000),
-        .TX_FIFO_DEPTH (16),
-        .RX_FIFO_DEPTH (16),
-        .USE_TX_FIFO   (1'b1),
-        .USE_RX_FIFO   (1'b1)
+    assign fast_rsp[FAST_NN].ready = nn_accel_hit ? nn_accel_ready : 1'b1;
+    assign fast_rsp[FAST_NN].rdata = nn_scratch_sel_q ? nn_scratch_rdata : nn_rdata_q;
+
+    // ---- Peripheral slaves --------------------------------------------------
+    sysctrl_periph sysctrl (
+        .clk_i(clk_i),
+        .rst_i(rst_i),
+        .req_i(p_req[PERIPH_SYSCTRL]),
+        .rsp_o(p_rsp[PERIPH_SYSCTRL]),
+        .led_o(led_reg)
+    );
+
+    uart_periph #(
+        .CLK_FREQ(27_000_000)
     ) uart (
-        .clk_i                  (clk_i),
-        .rst_i                  (rst_i),
-        .baud_rate_i            (uart_baud_rate),
-        .uart_rx_i              (uart_rx_i),
-        .uart_tx_o              (uart_tx_o),
-        .tx_data_i              (mem_wdata[7:0]),
-        .tx_valid_i             (uart_tx_write),
-        .tx_ready_o             (uart_tx_ready),
-        .tx_full_o              (uart_tx_full),
-        .tx_empty_o             (uart_tx_empty),
-        .tx_busy_o              (uart_tx_busy),
-        .tx_done_o              (uart_tx_done),
-        .rx_read_i              (uart_rx_read),
-        .rx_data_o              (uart_rx_data),
-        .rx_valid_o             (uart_rx_valid),
-        .rx_empty_o             (uart_rx_empty),
-        .rx_full_o              (uart_rx_full),
-        .rx_busy_o              (uart_rx_busy),
-        .error_clear_i          (uart_error_clear),
-        .framing_error_o        (uart_framing_error),
-        .rx_overflow_o          (uart_rx_overflow),
-        .framing_error_pulse_o  (uart_framing_error_pulse),
-        .rx_overflow_pulse_o    (uart_rx_overflow_pulse)
+        .clk_i    (clk_i),
+        .rst_i    (rst_i),
+        .req_i    (p_req[PERIPH_UART]),
+        .rsp_o    (p_rsp[PERIPH_UART]),
+        .uart_rx_i(uart_rx_i),
+        .uart_tx_o(uart_tx_o)
     );
 
     i2c_periph #(
@@ -257,36 +218,14 @@ module anv32_soc_top
     ) i2c (
         .clk_i(clk_i),
         .rst_i(rst_i),
-        .sel_i(i2c_sel),
-        .write_i(i2c_write),
-        .read_i(i2c_read),
-        .addr_i(mem_addr[4:0]),
-        .wdata_i(mem_wdata),
-        .rdata_o(i2c_rdata),
+        .req_i(p_req[PERIPH_I2C]),
+        .rsp_o(p_rsp[PERIPH_I2C]),
         .sda_io(i2c_sda_io),
         .scl_io(i2c_scl_io),
         .irq_o(i2c_irq)
     );
 
-    nn_accel_periph #(
-        .BASE_ADDR(NN_ACCEL_BASE_ADDR),
-        .SCRATCH_OFFSET(NN_SCRATCH_BASE - NN_BASE),
-        .SCRATCH_WORDS(4096)
-    ) nn_accel (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .mem_valid_i(mem_valid),
-        .mem_addr_i(mem_addr),
-        .mem_wdata_i(mem_wdata),
-        .mem_we_i(mem_we),
-        .mem_ready_o(nn_accel_ready),
-        .mem_rdata_o(nn_accel_rdata),
-        .mem_hit_o(nn_accel_hit),
-        .scratch_rdata_o(nn_scratch_rdata),
-        .scratch_sel_o(nn_scratch_sel),
-        .irq_o(nn_accel_irq)
-    );
-
+    // ---- Core -----------------------------------------------------------------
     generate
         if (CORE_TYPE == CORE_ANV32I1) begin : g_core_i1
             anv32i1_top core (
@@ -358,7 +297,7 @@ module anv32_soc_top
         .clk(clk_i),
 
         .addr_a(dmem_addr),
-        .wdata_a(mem_wdata),
+        .wdata_a(fast_req[FAST_BRAM].wdata),
         .we_a(dmem_we),
         .rdata_a(dmem_rdata),
 

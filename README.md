@@ -18,7 +18,7 @@ Verilator-based test and benchmark flow. Most development happens on a Tang
 Nano 9K (Gowin GW1NR-9); the design has also been run on a PYNQ-Z2.
 
 This is a work in progress. A superscalar core, a Linux-capable core, GPIO,
-SPI, timers, a proper peripheral bus and more are planned; see
+SPI, timers and more are planned; see
 [Status](#status) and the [roadmap](docs/roadmap.md).
 
 ## Cores
@@ -96,7 +96,9 @@ fix that parameter for the Gowin project.
 flowchart LR
     core["Core<br/>anv32i1 / im1 / im2"]
     bram["Dual-port BRAM<br/>4 KiB code + data"]
-    dec["Address decode"]
+    dec["Fast decoder<br/>0 wait"]
+    bridge["Bridge<br/>register slice"]
+    pdec["Peripheral decoder<br/>1 wait"]
     uart["UART0<br/>TX/RX FIFOs"]
     i2c["I2C0<br/>command queue"]
     nn["NN accelerator<br/>16 KiB scratch"]
@@ -106,11 +108,12 @@ flowchart LR
     core -- "instruction port" --> bram
     core -- "data port<br/>valid/ready" --> dec
     dec --> bram
-    dec --> uart
-    dec --> i2c
     dec --> nn
-    dec --> sys
     dec --> gpio
+    dec --> bridge --> pdec
+    pdec --> sys
+    pdec --> uart
+    pdec --> i2c
     gpio -. "external IRQ" .-> core
     nn -. "IRQ" .-> core
 ```
@@ -126,8 +129,13 @@ flowchart LR
 - GPIO interrupt input with a pending/clear register (the rest of GPIO is
   planned)
 - Status LEDs
+- A valid/ready data bus in two tiers: BRAM, the accelerator and GPIO answer
+  with no wait states, and the slower peripherals sit behind a register slice.
+  Peripheral registers have RP2040-style SET/CLR/XOR aliases for single-store
+  bit updates.
 
-The address map is in [`docs/memory_map.md`](docs/memory_map.md). C headers
+The address map and the bus are described in
+[`docs/memory_map.md`](docs/memory_map.md). C headers
 are in [`sw/include`](sw/include), and the matching SystemVerilog packages are
 in [`rtl/include`](rtl/include).
 
@@ -192,8 +200,8 @@ vendor specific.
 
 ```text
 rtl/core/        cores: common blocks, shared pipeline stages, per-core execute/top
-rtl/peripherals/ uart, i2c, nn_accelerator
-rtl/soc/         SoC top and per-core wrappers
+rtl/peripherals/ uart, i2c, gpio, sysctrl, nn_accelerator
+rtl/soc/         SoC top, per-core wrappers, bus decoder/bridge/register front end
 rtl/include/     ISA, config and register-map packages
 sim/tb/          Verilator testbenches
 sw/              crt0, linker scripts, examples, FPGA programs, benchmarks, tests,
@@ -217,7 +225,7 @@ the limitations below. Planned next:
 - GPIO, SPI, timer and PWM peripherals. Their addresses and register layouts
   are already defined, but most are not implemented yet; see
   [`docs/memory_map.md`](docs/memory_map.md#register-status).
-- A shared peripheral bus with access faults on bad addresses
+- Access faults on unmapped addresses
 - Timer interrupt and vectored interrupts
 
 Current limitations:
@@ -227,7 +235,6 @@ Current limitations:
 - `FENCE` is a no-op; `FENCE.I` (Zifencei) is not supported.
 - No debug module and no trigger CSRs (Sdtrig).
 - No `time` CSR; `cycle` and `instret` are implemented.
-- Peripherals are decoded directly in the SoC top.
 - Accesses to unmapped addresses read as zero instead of trapping.
 
 [`docs/roadmap.md`](docs/roadmap.md) has the full list.

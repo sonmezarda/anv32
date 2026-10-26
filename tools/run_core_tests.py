@@ -21,6 +21,7 @@ from run_benchmarks import CORE_DEFINES, CORE_FEATURES, CORE_SOURCES, QUIET_WARN
 CORE_TYPES = {"anv32i1": 0, "anv32im1": 1, "anv32im2": 2}
 
 SOC_SOURCES = [
+    "rtl/include/anv32_bus_pkg.sv",
     "rtl/include/anv32_soc_addr_pkg.sv",
     "rtl/include/anv32_sysctrl_regs_pkg.sv",
     "rtl/include/anv32_gpio_regs_pkg.sv",
@@ -35,6 +36,12 @@ SOC_SOURCES = [
     "rtl/peripherals/i2c/core/i2c_byte_master_timed.sv",
     "rtl/peripherals/i2c/core/i2c_cmd_master_timed.sv",
     "rtl/peripherals/i2c/i2c_periph.sv",
+    "rtl/soc/bus/anv32_bus_decoder.sv",
+    "rtl/soc/bus/anv32_bus_bridge.sv",
+    "rtl/soc/bus/anv32_bus_regs.sv",
+    "rtl/peripherals/sysctrl/sysctrl_periph.sv",
+    "rtl/peripherals/gpio/gpio_periph.sv",
+    "rtl/peripherals/uart/uart_periph.sv",
     "rtl/peripherals/nn_accelerator/int8_dot4.sv",
     "rtl/peripherals/nn_accelerator/dot_product_stream.sv",
     "rtl/peripherals/nn_accelerator/mem_dot_product_stream.sv",

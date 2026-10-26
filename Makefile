@@ -86,6 +86,7 @@ ASM_HARD_TESTS ?= \
 COMMON_PKGS := \
 	rtl/include/anv32_config_pkg.sv \
 	rtl/include/anv32_isa_pkg.sv \
+	rtl/include/anv32_bus_pkg.sv \
 	rtl/include/anv32_soc_addr_pkg.sv \
 	rtl/include/anv32_sysctrl_regs_pkg.sv \
 	rtl/include/anv32_gpio_regs_pkg.sv \
@@ -132,7 +133,7 @@ $(FETCH_TEST_LANE_HEX) &: $(FETCH_TEST_HEX_SRC) $(HEX_SPLIT)
 #            SRC_<t>  source list
 #            HEX_<t>  hex prerequisites (lane files) needed at run time, if any
 # ---------------------------------------------------------------------------
-TESTS := de m fetch_top
+TESTS := de m fetch_top bus
 
 TOP_de := tb_de_stage
 SRC_de := \
@@ -170,6 +171,15 @@ SRC_fetch_top := \
 	rtl/core/anv32i1/anv32i1_top.sv \
 	sim/tb/anv32i/tb_fetch_stage.sv
 HEX_fetch_top := $(FETCH_TEST_LANE_HEX)
+
+TOP_bus := tb_bus
+SRC_bus := \
+	rtl/include/anv32_bus_pkg.sv \
+	rtl/soc/bus/anv32_bus_decoder.sv \
+	rtl/soc/bus/anv32_bus_bridge.sv \
+	rtl/soc/bus/anv32_bus_regs.sv \
+	sim/tb/soc/tb_bus.sv
+HEX_bus :=
 
 SRC_program_fetch := \
 	$(COMMON_PKGS) \
@@ -683,6 +693,7 @@ help:
 	@echo "  make de              Run tb_de_stage.sv"
 	@echo "  make m               Run tb_m_stage.sv"
 	@echo "  make fetch_top       Run tb_fetch_stage.sv (needs lane hex)"
+	@echo "  make bus             Run tb_bus.sv (decoder, bridge, register aliases)"
 	@echo "  make all             Run all registered tests"
 	@echo "  make test TEST=name  Run a registered test"
 	@echo "  make hex             Generate byte-lane hex from PROG ($(PROG))"

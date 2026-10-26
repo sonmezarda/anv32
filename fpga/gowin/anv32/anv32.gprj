@@ -25,6 +25,7 @@
         <File path="../../../rtl/core/anv32im1/anv32im1_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_config_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_isa_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_bus_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_soc_addr_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_sysctrl_regs_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_gpio_regs_pkg.sv" type="file.verilog" enable="1"/>
@@ -46,6 +47,12 @@
         <File path="../../../rtl/peripherals/i2c/core/i2c_byte_master_timed.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/core/i2c_cmd_master_timed.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/i2c/i2c_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/soc/bus/anv32_bus_decoder.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/soc/bus/anv32_bus_bridge.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/soc/bus/anv32_bus_regs.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/sysctrl/sysctrl_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/gpio/gpio_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/uart/uart_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/nn_accelerator/int8_dot4.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/nn_accelerator/dot_product_stream.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/nn_accelerator/mem_dot_product_stream.sv" type="file.verilog" enable="1"/>

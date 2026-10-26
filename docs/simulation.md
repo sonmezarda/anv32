@@ -19,6 +19,7 @@ make all          # run every registered test
 make de           # decode + execute (anv32i1)
 make m            # memory stage
 make fetch_top    # fetch path through anv32i1_top
+make bus          # bus decoder, bridge and register aliases
 make list         # list registered tests
 ```
 
@@ -64,6 +65,7 @@ back through the LED register; the UART TX pin is looped back to RX.
 | Test                | Covers |
 | ------------------- | ------ |
 | `soc_regs`          | register reset values and read-back (UART, I2C, NN, SYSCTRL) |
+| `soc_alias`         | SET/CLR/XOR register aliases, including byte and halfword stores |
 | `soc_unmapped`      | unmapped addresses ignore writes, read zero, leave RAM alone |
 | `soc_uart_loopback` | UART TX/RX through the FIFOs |
 | `soc_gpio_irq`      | GPIO interrupt pending/clear and the external interrupt path |

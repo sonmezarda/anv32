@@ -50,4 +50,31 @@
 #define ANV32_REG16(addr)           (*(volatile uint16_t *)(uintptr_t)(addr))
 #define ANV32_REG8(addr)            (*(volatile uint8_t *)(uintptr_t)(addr))
 
+/*
+ * Atomic aliases. Each 4 KiB peripheral slot in the MMIO block mirrors its
+ * registers three more times, so a read-modify-write becomes one store:
+ *   +0x400  XOR: reg ^= value
+ *   +0x800  SET: reg |= value
+ *   +0xC00  CLR: reg &= ~value
+ * Example: anv32_reg_set(&ANV32_SYSCTRL_LED, 1u << 3);
+ */
+#define ANV32_ALIAS_XOR_OFFSET      0x400u
+#define ANV32_ALIAS_SET_OFFSET      0x800u
+#define ANV32_ALIAS_CLR_OFFSET      0xC00u
+
+static inline void anv32_reg_xor(volatile uint32_t *reg, uint32_t mask)
+{
+    ANV32_REG32((uintptr_t)reg + ANV32_ALIAS_XOR_OFFSET) = mask;
+}
+
+static inline void anv32_reg_set(volatile uint32_t *reg, uint32_t mask)
+{
+    ANV32_REG32((uintptr_t)reg + ANV32_ALIAS_SET_OFFSET) = mask;
+}
+
+static inline void anv32_reg_clr(volatile uint32_t *reg, uint32_t mask)
+{
+    ANV32_REG32((uintptr_t)reg + ANV32_ALIAS_CLR_OFFSET) = mask;
+}
+
 #endif
