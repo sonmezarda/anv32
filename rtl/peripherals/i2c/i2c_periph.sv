@@ -51,6 +51,7 @@ module i2c_periph
     end
 
     assign rsp_o.ready = 1'b1;
+    assign rsp_o.fast  = 1'b0;   // slow: registered at the core boundary
     assign rsp_o.rdata = rdata_q;
 
     logic       cmd_valid;

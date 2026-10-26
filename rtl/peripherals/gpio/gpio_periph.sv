@@ -22,7 +22,8 @@ module gpio_periph
     logic                   irq_sync1_q, irq_sync2_q, irq_prev_q;
     logic                   pending_q;
 
-    anv32_bus_regs #(.NREGS(NREGS)) bus_regs (
+    // GPIO is a fast (combinational, zero-wait) read peripheral.
+    anv32_bus_regs #(.NREGS(NREGS), .FAST(1'b1)) bus_regs (
         .clk_i  (clk_i),
         .rst_i  (rst_i),
         .req_i  (req_i),

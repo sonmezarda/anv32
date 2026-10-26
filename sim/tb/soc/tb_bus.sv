@@ -1,10 +1,13 @@
-// Bus fabric testbench: decoder, bridge and the register front end with its
-// SET/CLR/XOR aliases. Three slaves sit behind one decoder:
-//   0  0x0000_0000/64 KiB  memory, zero wait
-//   1  0x1000_1000/4 KiB   anv32_bus_regs with four plain storage registers
-//   2  0x1000_2000/4 KiB   bridge, then memory with random wait states
+// Bus fabric testbench: the read-data register stage (anv32_bus_read_pipe),
+// decoder, bridge and the register front end with its SET/CLR/XOR aliases.
+// The read pipe sits in front of the decoder; three slaves sit behind it:
+//   0  0x0000_0000/64 KiB  memory, fast (zero wait, data straight through)
+//   1  0x1000_1000/4 KiB   anv32_bus_regs, slow (fast=0 -> registered, +1 wait)
+//   2  0x1000_2000/4 KiB   bridge, then slow memory with random wait states
 // Anything else is unmapped. Random reads and writes, with random byte
-// enables and aliases, are checked against a model.
+// enables and aliases, are checked against a model. The read pipe must keep
+// read data correct, add exactly one wait to slow reads, and present each slow
+// slave with a single valid pulse (checked via the register read strobes).
 `timescale 1ns/1ps
 
 module tb_bus
@@ -19,20 +22,55 @@ module tb_bus
 
     bus_req_t       m_req;
     bus_rsp_t       m_rsp;
+    bus_req_t       dec_req;
+    bus_rsp_t       dec_rsp;
     bus_req_t [2:0] s_req;
     bus_rsp_t [2:0] s_rsp;
+
+    logic           rd_hit;
+    logic [1:0]     rd_sel;
+    logic [31:0]    rdata_fast;
+    logic [31:0]    rdata_slow;
+
+    // Static fast/slow read-data split by slave class (slave 0 fast, 1/2 slow).
+    always_comb begin
+        rdata_fast = 32'b0;
+        rdata_slow = 32'b0;
+        if (rd_hit) begin
+            for (int unsigned i = 0; i < 3; i++) begin
+                if (rd_sel == i[1:0]) begin
+                    if (s_rsp[i].fast) rdata_fast = s_rsp[i].rdata;
+                    else               rdata_slow = s_rsp[i].rdata;
+                end
+            end
+        end
+    end
+
+    // Read-data register stage under test, in front of the decoder.
+    anv32_bus_read_pipe dut_pipe (
+        .clk_i       (clk),
+        .rst_i       (rst),
+        .m_req_i     (m_req),
+        .m_rsp_o     (m_rsp),
+        .s_req_o     (dec_req),
+        .s_rsp_i     (dec_rsp),
+        .rdata_fast_i(rdata_fast),
+        .rdata_slow_i(rdata_slow)
+    );
 
     anv32_bus_decoder #(
         .N   (3),
         .BASE({32'h1000_2000, 32'h1000_1000, 32'h0000_0000}),
         .MASK({32'hFFFF_F000, 32'hFFFF_F000, 32'hFFFF_0000})
     ) dut_dec (
-        .clk_i  (clk),
-        .rst_i  (rst),
-        .m_req_i(m_req),
-        .m_rsp_o(m_rsp),
-        .s_req_o(s_req),
-        .s_rsp_i(s_rsp)
+        .clk_i   (clk),
+        .rst_i   (rst),
+        .m_req_i (dec_req),
+        .m_rsp_o (dec_rsp),
+        .s_req_o (s_req),
+        .s_rsp_i (s_rsp),
+        .rd_hit_o(rd_hit),
+        .rd_sel_o(rd_sel)
     );
 
     // Slave 0: zero-wait memory
@@ -47,7 +85,7 @@ module tb_bus
         end
     end
 
-    assign s_rsp[0] = '{ready: 1'b1, rdata: mem0_rdata_q};
+    assign s_rsp[0] = '{ready: 1'b1, fast: 1'b1, rdata: mem0_rdata_q};
 
     // Slave 1: register block
     logic [NREGS-1:0][31:0] regs_q;
@@ -106,7 +144,7 @@ module tb_bus
         end
     end
 
-    assign br_rsp = '{ready: slow_ready, rdata: mem2_rdata_q};
+    assign br_rsp = '{ready: slow_ready, fast: 1'b0, rdata: mem2_rdata_q};
 
     // Model
     logic [31:0] model0 [WORDS];
@@ -212,11 +250,11 @@ module tb_bus
 
         // Directed: wait states seen by the master
         access(32'h0000_0000, 32'h0, 4'h0, rdata, waits);
-        chk32("fast slave waits", 32'(waits), 32'd0);
+        chk32("fast slave waits", 32'(waits), 32'd0);        // fast: no wait
         access(32'h1000_1000, 32'h0, 4'h0, rdata, waits);
-        chk32("regs slave waits", 32'(waits), 32'd0);
+        chk32("regs slave waits", 32'(waits), 32'd1);        // slow: read pipe +1
         access(32'h1000_2000, 32'h0, 4'h0, rdata, waits);
-        chk32("bridge waits", 32'(waits), 32'd1);
+        chk32("bridge waits", 32'(waits), 32'd2);            // bridge +1, read pipe +1
         access(32'h5000_0000, 32'h0, 4'h0, rdata, waits);
         chk32("unmapped waits", 32'(waits), 32'd0);
         chk32("unmapped rdata", rdata, 32'h0);

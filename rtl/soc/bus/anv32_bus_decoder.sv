@@ -15,7 +15,12 @@ module anv32_bus_decoder
     output bus_rsp_t         m_rsp_o, // response to master
 
     output bus_req_t [N-1:0] s_req_o, // request to slaves
-    input  bus_rsp_t [N-1:0] s_rsp_i  // response from slaves
+    input  bus_rsp_t [N-1:0] s_rsp_i, // response from slaves
+
+    // Registered acceptance of the in-flight read: who owns the read data this
+    // cycle. Exposed so a boundary stage can split fast/slow read data by slave.
+    output logic                                 rd_hit_o,
+    output logic [((N > 1) ? $clog2(N) : 1)-1:0] rd_sel_o
 );
     localparam int unsigned SEL_W = (N > 1) ? $clog2(N) : 1;
 
@@ -66,7 +71,13 @@ module anv32_bus_decoder
 
     always_comb begin
         m_rsp_o.ready = any_hit ? s_rsp_i[sel].ready : 1'b1;
+        // fast is valid with ready (request cycle); an unmapped access reads as
+        // zero with no wait, so it reports fast.
+        m_rsp_o.fast  = any_hit ? s_rsp_i[sel].fast : 1'b1;
         m_rsp_o.rdata = rd_hit_q ? s_rsp_i[rd_sel_q].rdata : '0;
     end
+
+    assign rd_hit_o = rd_hit_q;
+    assign rd_sel_o = rd_sel_q;
 
 endmodule

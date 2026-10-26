@@ -178,6 +178,7 @@ SRC_bus := \
 	rtl/soc/bus/anv32_bus_decoder.sv \
 	rtl/soc/bus/anv32_bus_bridge.sv \
 	rtl/soc/bus/anv32_bus_regs.sv \
+	rtl/soc/bus/anv32_bus_read_pipe.sv \
 	sim/tb/soc/tb_bus.sv
 HEX_bus :=
 

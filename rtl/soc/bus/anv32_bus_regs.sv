@@ -14,7 +14,8 @@
 module anv32_bus_regs
     import anv32_bus_pkg::*;
 #(
-    parameter int unsigned NREGS = 4
+    parameter int unsigned NREGS = 4,
+    parameter bit          FAST  = 1'b0  // 1: combinational read (no boundary wait)
 )(
     input  logic                   clk_i,
     input  logic                   rst_i,
@@ -76,6 +77,7 @@ module anv32_bus_regs
     end
 
     assign rsp_o.ready = 1'b1;
+    assign rsp_o.fast  = FAST;
     assign rsp_o.rdata = rdata_q;
 
 endmodule

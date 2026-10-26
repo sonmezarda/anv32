@@ -2,7 +2,7 @@ module anv32_soc_top
     import anv32_bus_pkg::*;
     import anv32_soc_addr_pkg::*;
 #(
-    parameter int unsigned CORE_TYPE   = 2,
+    parameter int unsigned CORE_TYPE   = 1,
     parameter int unsigned BRAM_ADDR_W = 10,
     parameter int unsigned POR_CYCLES  = 8,
     parameter              INIT_FILE   = "src/prog"
@@ -93,12 +93,54 @@ module anv32_soc_top
     assign external_irq = gpio_irq_pending || nn_accel_irq;
 
     // ---- Bus fabric ---------------------------------------------------------
-    assign core_req.valid = mem_valid;
-    assign core_req.addr  = mem_addr;
-    assign core_req.wdata = mem_wdata;
-    assign core_req.we    = mem_we;
-    assign mem_ready      = core_rsp.ready;
-    assign mem_rdata      = core_rsp.rdata;
+    // The core's request first passes through a read-data register stage that
+    // registers slow (fast==0) peripheral reads at the boundary, keeping their
+    // read data out of the core's combinational load/forwarding path. Fast
+    // slaves (BRAM, GPIO) and writes pass through with no added latency.
+    bus_req_t cpu_req;
+    bus_rsp_t cpu_rsp;
+
+    assign cpu_req.valid = mem_valid;
+    assign cpu_req.addr  = mem_addr;
+    assign cpu_req.wdata = mem_wdata;
+    assign cpu_req.we    = mem_we;
+    assign mem_ready     = cpu_rsp.ready;
+    assign mem_rdata     = cpu_rsp.rdata;
+
+    // Split the decoded read data into fast and slow buses by slave class. Each
+    // slave's bus_rsp_t.fast is a constant, so the per-slave routing resolves at
+    // elaboration: a slow slave's read register (e.g. NN scratch) only reaches
+    // rdata_slow, never rdata_fast, so the read pipe can register it away from
+    // the core's combinational load path. rd_sel/rd_hit name the slave that
+    // owns the read data this cycle.
+    logic                            rd_hit;
+    logic [$clog2(FAST_N)-1:0]       rd_sel;
+    logic [31:0]                     rdata_fast;
+    logic [31:0]                     rdata_slow;
+
+    always_comb begin
+        rdata_fast = 32'b0;
+        rdata_slow = 32'b0;
+        if (rd_hit) begin
+            for (int unsigned i = 0; i < FAST_N; i++) begin
+                if (rd_sel == i[$clog2(FAST_N)-1:0]) begin
+                    if (fast_rsp[i].fast) rdata_fast = fast_rsp[i].rdata;
+                    else                  rdata_slow = fast_rsp[i].rdata;
+                end
+            end
+        end
+    end
+
+    anv32_bus_read_pipe read_pipe (
+        .clk_i       (clk_i),
+        .rst_i       (rst_i),
+        .m_req_i     (cpu_req),
+        .m_rsp_o     (cpu_rsp),
+        .s_req_o     (core_req),
+        .s_rsp_i     (core_rsp),
+        .rdata_fast_i(rdata_fast),
+        .rdata_slow_i(rdata_slow)
+    );
 
     anv32_bus_decoder #(
         .N   (FAST_N),
@@ -110,7 +152,9 @@ module anv32_soc_top
         .m_req_i(core_req),
         .m_rsp_o(core_rsp),
         .s_req_o(fast_req),
-        .s_rsp_i(fast_rsp)
+        .s_rsp_i(fast_rsp),
+        .rd_hit_o(rd_hit),
+        .rd_sel_o(rd_sel)
     );
 
     anv32_bus_bridge periph_bridge (
@@ -140,7 +184,7 @@ module anv32_soc_top
     // Only the low BRAM_ADDR_W bits decode; the rest of the region wraps.
     assign dmem_addr           = fast_req[FAST_BRAM].addr[BRAM_ADDR_W+1:2];
     assign dmem_we             = fast_req[FAST_BRAM].valid ? fast_req[FAST_BRAM].we : 4'b0;
-    assign fast_rsp[FAST_BRAM] = '{ready: 1'b1, rdata: dmem_rdata};
+    assign fast_rsp[FAST_BRAM] = '{ready: 1'b1, fast: 1'b1, rdata: dmem_rdata};
     assign imem_addr           = instr_addr[BRAM_ADDR_W+1:2];
 
     gpio_periph gpio (
@@ -186,6 +230,7 @@ module anv32_soc_top
     end
 
     assign fast_rsp[FAST_NN].ready = nn_accel_hit ? nn_accel_ready : 1'b1;
+    assign fast_rsp[FAST_NN].fast  = 1'b0;   // slow: registered at the core boundary
     assign fast_rsp[FAST_NN].rdata = nn_scratch_sel_q ? nn_scratch_rdata : nn_rdata_q;
 
     // ---- Peripheral slaves --------------------------------------------------

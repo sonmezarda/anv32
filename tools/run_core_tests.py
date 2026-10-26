@@ -39,6 +39,7 @@ SOC_SOURCES = [
     "rtl/soc/bus/anv32_bus_decoder.sv",
     "rtl/soc/bus/anv32_bus_bridge.sv",
     "rtl/soc/bus/anv32_bus_regs.sv",
+    "rtl/soc/bus/anv32_bus_read_pipe.sv",
     "rtl/peripherals/sysctrl/sysctrl_periph.sv",
     "rtl/peripherals/gpio/gpio_periph.sv",
     "rtl/peripherals/uart/uart_periph.sv",

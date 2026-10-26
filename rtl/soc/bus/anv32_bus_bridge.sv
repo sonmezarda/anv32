@@ -40,6 +40,10 @@ module anv32_bus_bridge
     // The master holds its request until ready, so the captured copy is still
     // the request being accepted here.
     assign m_rsp_o.ready = busy_q && s_rsp_i.ready;
+    // Everything behind the bridge is a slow (registered-at-boundary) read, so
+    // report a constant fast=0. Keeping it constant lets the boundary stage
+    // statically route this subtree's read data onto the slow (registered) bus.
+    assign m_rsp_o.fast  = 1'b0;
     assign m_rsp_o.rdata = s_rsp_i.rdata;
 
 endmodule
