@@ -29,6 +29,8 @@ nested interrupts, a debug module, accelerator interfaces.
 - A Linux-capable core: S and U modes, Sv32 MMU, the A extension, and the
   timer/interrupt support Linux expects
 - `FENCE.I` (Zifencei)
+- Zbs (single-bit instructions: `bset`, `bclr`, `binv`, `bext`), and later
+  other bit-manipulation extensions (Zba, Zbb)
 - Access-fault traps on bus errors
 - `mtvec` vectored mode and a timer interrupt (CLINT-style `mtime`/`mtimecmp`)
 - Trigger CSRs (Sdtrig) and a debug module
