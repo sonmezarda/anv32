@@ -113,7 +113,10 @@ module anv32_execute_i_c1
     assign valid_o        = dinstr_i.valid;
 
     always_ff @(posedge clk_i) begin
-        if (rst_i || trap_req_o || mret_req_o || kill_i) begin
+        // While stalled, einstr_o is the M-stage instruction waiting on memory,
+        // so a trap/MRET in E must not clear it. kill_i (an interrupt) is
+        // never raised during a memory wait.
+        if (rst_i || kill_i || ((trap_req_o || mret_req_o) && !stall_i)) begin
             einstr_o <= '0;
         end else if (!stall_i) begin
             einstr_o.valid         <= dinstr_i.valid;

@@ -27,6 +27,7 @@ module anv32im1_top
     logic [XLEN-1:0]        dmem_wdata;
     logic [3:0]             dmem_we;
     logic                   dmem_valid;
+    logic                   mem_wait_stall;
 
     logic                   stall_f, stall_d, stall_e;
 
@@ -63,7 +64,9 @@ module anv32im1_top
     logic                   e_mul_div_stall, md_stall, e_div_busy;
     logic                   csr_cnt_stall;
 
-    // E stage trap out
+    // E stage trap out. e_* are the raw requests from E; trap_req/mret_req
+    // are the ones acted on (held back while M waits on memory).
+    logic                   e_trap_req, e_mret_req;
     logic                   trap_req;
     logic [XLEN-1:0]        trap_pc, trap_cause, trap_tval;
     logic                   mret_req;
@@ -122,7 +125,12 @@ module anv32im1_top
          (einstr.csr_addr == CSR_MSTATUS || einstr.csr_addr == CSR_MIE)) ||
         (csr_we && (csr_waddr == CSR_MSTATUS || csr_waddr == CSR_MIE));
 
-    assign irq_req = irq_pending && !irq_csr_hazard && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i;
+    // A trap or MRET in E waits until a pending memory access in M completes,
+    // so the CSR update and the redirect happen exactly once.
+    assign trap_req = e_trap_req && !stall_i && !mem_wait_stall;
+    assign mret_req = e_mret_req && !stall_i && !mem_wait_stall;
+
+    assign irq_req = irq_pending && !irq_csr_hazard && !trap_req && !mret_req && !pc_jmp_en_i && !stall_i && !mem_wait_stall;
 
     always_comb begin : csr_trap_mux_comb
         csr_trap       = trap_req || irq_req;
@@ -164,18 +172,22 @@ module anv32im1_top
     // Stall routing: a multi-cycle E op stalls upstream while M/W drain
     assign md_stall    = e_mul_div_stall;            // HAS_M=0 -> execute tie-off 0
 
+    // M is waiting on the data bus (mem_valid without mem_ready)
+    assign mem_wait_stall = dmem_valid && !mem_ready_i;
+
     assign stall_e     = md_stall;
+
     // A counter read (mcycle/minstret and their aliases) waits in D until
     // every older instruction has retired, so minstret counts all of them.
     assign csr_cnt_stall =
         dinstr_decode.valid && dinstr_decode.is_csr && csr_is_counter(dinstr_decode.csr_addr) &&
         (dinstr.valid || einstr.valid || minstr.valid || e_div_busy);
 
-    assign stall_f_eff = stall_i || stall_f || md_stall || csr_cnt_stall;
-    assign stall_d_eff = stall_i || stall_d || md_stall || csr_cnt_stall;
-    assign stall_e_eff = stall_i || stall_e;
-    assign stall_m_eff = stall_i;
-    assign stall_w_eff = stall_i;
+    assign stall_f_eff = stall_i || stall_f || md_stall || csr_cnt_stall || mem_wait_stall;
+    assign stall_d_eff = stall_i || stall_d || md_stall || csr_cnt_stall || mem_wait_stall;
+    assign stall_e_eff = stall_i || stall_e || mem_wait_stall;
+    assign stall_m_eff = stall_i || mem_wait_stall;
+    assign stall_w_eff = stall_i || mem_wait_stall;
 
     anv32_hazard_basic hazard_unit(
         .branch_taken_i(pc_jmp_en),
@@ -249,7 +261,7 @@ module anv32im1_top
 
     anv32_decode_c1 #(.HAS_M(HAS_M)) D(
         .clk_i(clk_i),
-        .hold_i(stall_i),
+        .hold_i(stall_i || mem_wait_stall),   // not md_stall: E already holds a copy of the DIV
         .rs1_hold_i(rs1_E_din),
         .rs2_hold_i(rs2_E_din),
         .csr_hold_i(csr_rdata_E),
@@ -283,11 +295,11 @@ module anv32im1_top
         .einstr_o(einstr),
         .mul_div_stall_o(e_mul_div_stall),
         .div_busy_o(e_div_busy),
-        .trap_req_o(trap_req),
+        .trap_req_o(e_trap_req),
         .trap_pc_o(trap_pc),
         .trap_cause_o(trap_cause),
         .trap_tval_o(trap_tval),
-        .mret_req_o(mret_req)
+        .mret_req_o(e_mret_req)
     );
 
     anv32_memory_c1 M(

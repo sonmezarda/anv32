@@ -67,7 +67,7 @@ Common features:
 - Separate instruction and data ports into a dual-port BRAM
 - Single-cycle multiplier and a 32-cycle radix-2 divider (`im` cores)
 - `mem_valid`/`mem_ready` handshake on the data port so the pipeline can wait
-  on slow devices (`anv32im2`; the older cores ignore `mem_ready`)
+  on slow devices
 
 `anv32i1` is frozen. It sits right at 27 MHz on the GW1NR-9 and is kept as the
 simple reference core. New work goes into `anv32im2`, which the FPGA project

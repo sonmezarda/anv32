@@ -42,8 +42,8 @@ assembly programs run on the bare core by `sim/tb/common/tb_core_test.sv`. A
 small test device in the testbench lets a program report pass/fail and raise
 the external interrupt a given number of cycles later (see
 [`sw/tests/test.h`](../sw/tests/test.h)). The interrupt tests sweep that delay
-so the interrupt hits every pipeline position. On `anv32im2` every test also
-runs a second time with random data-port wait states.
+so the interrupt hits every pipeline position. Every test also runs a second
+time with random data-port wait states.
 
 | Test           | Covers |
 | -------------- | ------ |
@@ -93,8 +93,8 @@ testbench is built with the same reset PC.
 
 A few tests are skipped because they need features the cores do not have
 (Zifencei, misaligned access in hardware, Sdtrig, PMP entries). The runner
-prints each skipped test with the reason. As in the core suite, `anv32im2`
-also runs every test with random data-port wait states.
+prints each skipped test with the reason. As in the core suite, every test
+also runs with random data-port wait states.
 
 `make arch-test` needs Spike. The CI workflow builds it from a pinned commit;
 see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).

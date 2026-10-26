@@ -94,8 +94,8 @@ CORE_DEFINES = {
 }
 
 CORE_FEATURES = {
-    "anv32i1": set(),
-    "anv32im1": {"m"},
+    "anv32i1": {"mem_ready"},
+    "anv32im1": {"m", "mem_ready"},
     "anv32im2": {"m", "mem_ready"},
 }
 
