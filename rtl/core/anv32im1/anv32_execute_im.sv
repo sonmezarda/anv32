@@ -119,7 +119,16 @@ module anv32_execute_im
     // jump/branch to an address that is not 4-byte aligned (no C extension).
     logic mem_misaligned_exc, fetch_misaligned_exc;
 
-    assign mem_misaligned_exc   = dinstr_i.is_mem && mem_misaligned(dinstr_i.op, alu_result[1:0]);
+    // The misalignment check only needs the low two address bits. For a
+    // load/store the address is rs1 + imm = alu_a + alu_b (alu_op is always
+    // ADD), and address bits [1:0] depend only on operand bits [1:0]. Compute
+    // them with a dedicated 2-bit adder so trap_req does not wait on the full
+    // ALU result (and its output mux) — that path, fanning out to the trap
+    // redirect and CSR writes, was the Fmax-limiting path on anv32im1.
+    logic [1:0] mem_addr_lsb;
+    assign mem_addr_lsb = alu_a[1:0] + alu_b[1:0];
+
+    assign mem_misaligned_exc   = dinstr_i.is_mem && mem_misaligned(dinstr_i.op, mem_addr_lsb);
     assign fetch_misaligned_exc = dinstr_i.is_pc_changer && branch_taken_i && pc_target[1];
 
     assign trap_req_o = dinstr_i.valid &&
