@@ -1,0 +1,5 @@
+# GOWIN IDE rewrites rtl/ file paths to absolute WSL UNC paths on every save.
+# The 'gowinpath' clean filter normalizes them back to repo-relative on commit.
+# Filter definition lives in local .git/config (see README / setup below):
+#   git config filter.gowinpath.clean "sed -E 's#path=\"[^\"]*/(rtl/[^\"]*)\"#path=\"../../../\\1\"#'"
+fpga/gowin/*/*.gprj filter=gowinpath

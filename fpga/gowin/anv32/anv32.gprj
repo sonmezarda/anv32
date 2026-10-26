@@ -6,59 +6,60 @@
     <Device name="GW1NR-9C" pn="GW1NR-LV9QN88PC6/I5">gw1nr9c-004</Device>
     <FileList>
         <File path="../../../rtl/common/mem/anv32_bram_tdp.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/pipe5/anv32_hazard_basic.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/pipe5/anv32_forward_unit.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/anv32i1/anv32i1_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/pipe5/anv32_decode_c1.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32i1/anv32_execute_i_c1.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/pipe5/anv32_memory_c1.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/pipe5/anv32_writeback_c1.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/pipe5/anv32_fetch_c1.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_alu.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_mul_comb.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_div.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_decoder.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_csr.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_csr_exec.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/common/anv32_regfile.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32i1/anv32i1_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32im1/anv32_execute_im.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/core/anv32im1/anv32im1_top.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32_execute_im_c1.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32_execute_im_c2.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32_forward_unit_im2.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/anv32im2/anv32im2_top.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_alu.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_csr.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_csr_exec.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_decoder.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_div.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_mul_comb.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/common/anv32_regfile.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/pipe5/anv32_decode_c1.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/pipe5/anv32_fetch_c1.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/pipe5/anv32_forward_unit.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/pipe5/anv32_hazard_basic.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/pipe5/anv32_memory_c1.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/core/pipe5/anv32_writeback_c1.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_config_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_gpio_regs_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_i2c_regs_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_isa_pkg.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/include/anv32_bus_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_nn_regs_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_soc_addr_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_sysctrl_regs_pkg.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/include/anv32_gpio_regs_pkg.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/include/anv32_uart_regs_pkg.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/include/anv32_i2c_regs_pkg.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/include/anv32_nn_regs_pkg.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/i2c/core/i2c_byte_master_timed.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/i2c/core/i2c_cmd_master_timed.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/i2c/i2c_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/dense_layer_engine.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/dot_product_stream.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/int8_dot4.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/mem_dot_product_stream.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/nn_accelerator/nn_accel_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/uart/core/uart_baud_rate.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/uart/core/uart_fifo.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/uart/core/uart_rx.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/uart/core/uart_top.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/uart/core/uart_tx.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/uart/uart_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32_soc_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32i1_soc_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32im1_soc_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32im2_soc_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/anv32im2/anv32_execute_im_c1.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/anv32im2/anv32_execute_im_c2.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/anv32im2/anv32im2_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/uart/core/uart_fifo.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/uart/core/uart_baud_rate.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/uart/core/uart_rx.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/uart/core/uart_tx.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/uart/core/uart_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/i2c/core/i2c_byte_master_timed.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/i2c/core/i2c_cmd_master_timed.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/i2c/i2c_periph.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/soc/bus/anv32_bus_decoder.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/bus/anv32_bus_bridge.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/soc/bus/anv32_bus_decoder.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/bus/anv32_bus_regs.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/sysctrl/sysctrl_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/gpio/gpio_periph.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/sysctrl/sysctrl_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/uart/uart_periph.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/nn_accelerator/int8_dot4.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/nn_accelerator/dot_product_stream.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/nn_accelerator/mem_dot_product_stream.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/nn_accelerator/dense_layer_engine.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/peripherals/nn_accelerator/nn_accel_periph.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/core/anv32im2/anv32_forward_unit_im2.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/include/anv32_bus_pkg.sv" type="file.verilog" enable="1"/>
         <File path="src/anv32.cst" type="file.cst" enable="1"/>
         <File path="src/anv32.sdc" type="file.sdc" enable="1"/>
     </FileList>
