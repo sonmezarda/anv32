@@ -37,9 +37,11 @@ Low-speed peripherals use 4 KiB slots under `0x1000_0000`.
 
 ## Bus
 
-The core's data port is a valid/ready bus (`rtl/include/anv32_bus_pkg.sv`).
+Both core ports use the valid/ready protocol in `rtl/include/anv32_bus_pkg.sv`.
 A transfer happens on a cycle where both `valid` and `ready` are high, and
-read data comes back on the following cycle. Wait states per access:
+read data comes back on the following cycle. In the SoC the instruction port
+goes straight to the BRAM, which is always ready; the data port goes through
+the bus fabric below. Wait states per access:
 
 | Slaves | Write | Read |
 | --- | ---: | ---: |

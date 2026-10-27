@@ -15,6 +15,8 @@ module anv32im2_top
 
     input  logic [XLEN-1:0] instr_i,
     output logic [XLEN-1:0] instr_addr_o,
+    output logic            instr_req_o,
+    input  logic            instr_ready_i,
 
     input  logic [XLEN-1:0] mem_rdata_i,
     input  logic            mem_ready_i,
@@ -25,6 +27,8 @@ module anv32im2_top
 );
 
     logic [XLEN-1:0] fetch_addr;
+
+    logic [XLEN-1:0] fetch_next_pc;
 
     logic [XLEN-1:0]        dmem_wdata;
     logic [3:0]             dmem_we;
@@ -124,7 +128,7 @@ module anv32im2_top
         end else if (finstr.valid) begin
             irq_pc = finstr.pc;
         end else begin
-            irq_pc = fetch_addr;
+            irq_pc = fetch_next_pc;
         end
     end
 
@@ -239,6 +243,9 @@ module anv32im2_top
         .pc_jmp_addr_i(pc_jmp_addr),
         .instr_i(instr_i),
         .fetch_addr_o(fetch_addr),
+        .fetch_req_o(instr_req_o),
+        .fetch_ready_i(instr_ready_i),
+        .next_pc_o(fetch_next_pc),
         .finstr_o(finstr)
     );
 

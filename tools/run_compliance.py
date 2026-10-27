@@ -144,7 +144,7 @@ def run_one(args: argparse.Namespace, sim: Path, test: dict, mem_wait: bool, out
                 f"+sig_begin={symbol(args, test['elf'], 'begin_signature'):x}",
                 f"+sig_end={symbol(args, test['elf'], 'end_signature'):x}"]
     if mem_wait:
-        cmd.append("+mem_wait")
+        cmd += ["+mem_wait", "+imem_wait"]
     proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     result = {"status": "ERROR", "code": 0, "note": ""}
     for line in proc.stdout.splitlines():

@@ -148,10 +148,11 @@ def build_tb(args: argparse.Namespace, repo: Path, suite: str, core: str, out_di
 
 def run_test(args: argparse.Namespace, repo: Path, sim: Path, prog: Path, test: dict,
              mem_wait: bool | int) -> dict:
-    """mem_wait: False = none, True = random wait states, n = every access waits n cycles."""
+    """mem_wait: False = none, True = random wait states on both ports,
+    n = every data access waits n cycles."""
     cmd = [str(sim), f"+prog={prog}", f"+max_cycles={test.get('max_cycles', 200000)}"]
     if mem_wait is True:
-        cmd.append("+mem_wait")
+        cmd += ["+mem_wait", "+imem_wait"]
     elif mem_wait:
         cmd.append(f"+mem_wait_fixed={mem_wait}")
     proc = subprocess.run(cmd, cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

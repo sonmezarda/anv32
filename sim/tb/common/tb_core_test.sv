@@ -12,8 +12,9 @@
 // Plusargs:
 //   +prog=<file>        word hex image, loaded at RESET_PC (RAM wraps every 4 MiB)
 //   +max_cycles=<n>     timeout (default 200000)
-//   +mem_wait           random data-port wait states (cores with mem_ready only)
+//   +mem_wait           random data-port wait states
 //   +mem_wait_fixed=<n> every data access waits exactly n cycles before ready
+//   +imem_wait          random instruction-port wait states
 //   +tohost=<hex>       riscv-tests: a store here ends the test (1 = pass)
 //   +signature=<file> +sig_begin=<hex> +sig_end=<hex>
 //                       dump RAM [sig_begin, sig_end) at the end of the test
@@ -40,6 +41,8 @@ module tb_core_test
 
     logic [31:0] instr_addr;
     logic [31:0] instr_rdata;
+    logic        instr_req;
+    logic        instr_ready;
     logic [31:0] mem_addr;
     logic [31:0] mem_wdata;
     logic [31:0] mem_rdata;
@@ -72,6 +75,8 @@ module tb_core_test
         .instr_valid_o(),
         .instr_i(instr_rdata),
         .instr_addr_o(instr_addr),
+        .instr_req_o(instr_req),
+        .instr_ready_i(instr_ready),
         .mem_rdata_i(mem_rdata),
         .mem_ready_i(mem_ready),
         .mem_wdata_o(mem_wdata),
@@ -97,7 +102,9 @@ module tb_core_test
     assign mem_rdata = clint_sel_q ? clint_rsp.rdata : mem_rdata_q;
 
     always_ff @(posedge clk) begin
-        instr_rdata <= ram[instr_addr[RAM_ADDR_W-1:2]];
+        // Read data is only valid after an accepted request; anything else
+        // reads as an illegal instruction so a core that uses it traps.
+        instr_rdata <= (instr_req && instr_ready) ? ram[instr_addr[RAM_ADDR_W-1:2]] : 32'hFFFF_FFFF;
         clint_sel_q <= clint_sel;
 
         if (test_sel) begin
@@ -147,6 +154,49 @@ module tb_core_test
     // so each load/store is guaranteed to stall the pipeline.
     assign mem_ready = (wait_fixed != 0) ? !(mem_valid && pend_cycles < wait_fixed)
                                          : !(wait_en && mem_valid && lfsr[0] && lfsr[5]);
+
+    // ---- Optional instruction-port wait states -----------------------------
+    logic        imem_wait_en = 1'b0;
+    logic [15:0] ilfsr = 16'h5EED;
+
+    always_ff @(posedge clk) begin
+        ilfsr <= {ilfsr[14:0], ilfsr[15] ^ ilfsr[13] ^ ilfsr[12] ^ ilfsr[10]};
+    end
+
+    assign instr_ready = !(imem_wait_en && instr_req && ilfsr[1] && ilfsr[7]);
+
+    // ---- Bus protocol check ------------------------------------------------
+    // A request that is not accepted must stay on the port unchanged.
+    logic        ireq_wait_q = 1'b0;
+    logic [31:0] iaddr_q;
+    logic        dreq_wait_q = 1'b0;
+    logic [31:0] daddr_q, dwdata_q;
+    logic [3:0]  dwe_q;
+    logic        protocol_error = 1'b0;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            ireq_wait_q <= 1'b0;
+            dreq_wait_q <= 1'b0;
+        end else begin
+            if (ireq_wait_q && (!instr_req || instr_addr != iaddr_q)) begin
+                $display("PROTOCOL: instruction request changed while waiting (%08x -> %08x, req=%b)",
+                         iaddr_q, instr_addr, instr_req);
+                protocol_error <= 1'b1;
+            end
+            if (dreq_wait_q && (!mem_valid || mem_addr != daddr_q || mem_we != dwe_q ||
+                                (mem_we != 4'b0 && mem_wdata != dwdata_q))) begin
+                $display("PROTOCOL: data request changed while waiting at %08x", daddr_q);
+                protocol_error <= 1'b1;
+            end
+            ireq_wait_q <= instr_req && !instr_ready;
+            iaddr_q     <= instr_addr;
+            dreq_wait_q <= mem_valid && !mem_ready;
+            daddr_q     <= mem_addr;
+            dwdata_q    <= mem_wdata;
+            dwe_q       <= mem_we;
+        end
+    end
 
     // ---- Test device -------------------------------------------------------
     logic        done = 1'b0;
@@ -211,6 +261,7 @@ module tb_core_test
         if (!$value$plusargs("max_cycles=%d", max_cycles)) max_cycles = 200000;
         wait_en = $test$plusargs("mem_wait");
         if (!$value$plusargs("mem_wait_fixed=%d", wait_fixed)) wait_fixed = 0;
+        imem_wait_en = $test$plusargs("imem_wait");
         tohost_en = $value$plusargs("tohost=%h", tohost_addr);
 
         repeat (3) @(posedge clk);
@@ -231,7 +282,9 @@ module tb_core_test
             $fclose(fd);
         end
 
-        if (!done) begin
+        if (protocol_error) begin
+            $display("TEST_RESULT status=FAIL code=999 cycles=%0d", cycle);
+        end else if (!done) begin
             $display("TEST_RESULT status=TIMEOUT code=0 cycles=%0d", cycle);
         end else if (tohost_hit && result != 32'd1) begin
             // riscv-tests encode the failing test number as (n << 1) | 1

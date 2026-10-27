@@ -55,6 +55,8 @@ module tb_mem_ready_stall
         .instr_valid_o(instr_valid_o),
         .instr_i(instr_rdata),
         .instr_addr_o(instr_addr),
+        .instr_req_o(),
+        .instr_ready_i(1'b1),
         .mem_rdata_i(mem_rdata),
         .mem_ready_i(mem_ready),
         .mem_wdata_o(mem_wdata),

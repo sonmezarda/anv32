@@ -40,6 +40,8 @@ module tb_program_fetch
         .instr_valid_o(instr_valid),
         .instr_i(instr_rdata),
         .instr_addr_o(instr_addr),
+        .instr_req_o(),
+        .instr_ready_i(1'b1),
         .mem_rdata_i(32'b0),
         .mem_ready_i(1'b1),
         .mem_wdata_o(),
