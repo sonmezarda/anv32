@@ -189,6 +189,34 @@ spike.raw.log    spike.norm.log    core.norm.log    pipeline.log    commit.diff
 
 `make asm-golden-run` produces the logs without running the diff.
 
+## Doom on the simulation platform
+
+```sh
+python3 tools/run_doom_sim.py --core anv32im1 --video build/doom/doom.mp4
+python3 tools/run_doom_sim.py --core anv32im2 --max-frames 300 --png 100,250
+```
+
+Runs [doomgeneric](https://github.com/ozkl/doomgeneric) on
+`sim/tb/common/tb_platform.sv`: one core with 32 MiB of RAM at `0x8000_0000`
+(where external RAM sits in the SoC memory map) and a small device for
+console output, exit and frame dumps. The port in [`sw/doom`](../sw/doom)
+draws into an 8-bit indexed 320x200 buffer and hands each frame and the
+palette to the testbench; the shareware IWAD is linked into the image and
+served through a minimal POSIX layer on top of picolibc. There is no input,
+so the game runs its attract mode: title screen, then demo playback.
+
+The script fetches doomgeneric at a pinned commit, uses the system picolibc
+(`picolibc-riscv64-unknown-elf`) or extracts the Debian package locally
+without installing it, and does the same for the shareware WAD
+(`doom-wad-shareware`) unless `--wad` points at one. Nothing from these ends
+up in the repository; everything goes under `build/`. Frames are converted
+by `tools/doom_frames.py` (needs Pillow, and ffmpeg for `--video`).
+
+Game time comes from `rdcycle` with an assumed 50 MHz clock, so the frame
+rate in the dump is what the core would reach at that clock with
+single-cycle memory. The simulation runs at about 3 million cycles per
+second; the first frame appears after about 300 million cycles.
+
 ## Benchmarks
 
 ```sh

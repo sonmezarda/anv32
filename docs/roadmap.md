@@ -16,6 +16,9 @@ what comes next.
   in simulation and on the Tang Nano 9K with the default 32 KiB, no-NN build.
 - A UART bootloader in the top 1 KiB of the BRAM loads programs without a new
   bitstream; a hardware trigger on the RX pin resets the SoC into it.
+- Doom (doomgeneric, shareware) runs on `anv32im1` and `anv32im2` in
+  simulation with single-cycle memory. Running it on the PYNQ-Z2 needs
+  caches, DDR access over AXI and a video output.
 
 ## anv32i1 is frozen
 
