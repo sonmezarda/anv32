@@ -57,7 +57,7 @@ the core combinationally (`bus_rsp_t.fast`): only BRAM and GPIO0 do. Every
 other read is registered at the core boundary
 (`rtl/soc/bus/anv32_bus_read_pipe.sv`), one more cycle, so slow read paths
 stay off the core's load/forwarding timing path. GPIO0 is in the MMIO block
-but lives on the fast tier so that pin I/O does not pay those cycles.
+but lives on the first decoder so that pin I/O does not pay those cycles.
 
 ### Atomic aliases
 

@@ -252,7 +252,10 @@ make fpga FILE=sw/fpga/uart_hello.c
 This builds the program and writes `fpga/gowin/anv32/src/prog*.hex`, with the
 UART bootloader merged in at the top of the BRAM. The BRAM loads these files
 at synthesis. Sources under `sw/freertos/` are built with the FreeRTOS kernel
-automatically.
+automatically. Open `fpga/gowin/anv32/anv32.gprj` in the Gowin IDE, then
+synthesize and program. The project references RTL directly from `rtl/`. Only
+the Gowin project is in the repo for now; the RTL itself is not vendor
+specific.
 
 Once a bitstream with the bootloader is on the board, new software goes over
 UART instead, without the reset button or a new bitstream:
@@ -268,10 +271,16 @@ the image with a CRC-32 check and runs it. A power-on or button reset runs the
 program in the BRAM straight away. The protocol is described in
 [`sw/boot/bootloader.S`](sw/boot/bootloader.S). The image only lives in the
 BRAM, so it is gone after a power cycle; `make fpga` puts a program in the
-bitstream. Open `fpga/gowin/anv32/anv32.gprj` in the Gowin
-IDE, then synthesize and program. The project references RTL directly from
-`rtl/`. Only the Gowin project is in the repo for now; the RTL itself is not
-vendor specific.
+bitstream.
+
+When the Gowin IDE runs on Windows and opens the repository over WSL, it
+rewrites the file paths in `anv32.gprj` as absolute `\\wsl$` paths on every
+save. A git clean filter turns them back into relative paths on commit; it
+has to be set up once per clone:
+
+```sh
+git config filter.gowinpath.clean "sed -E 's#path=\"[^\"]*/(rtl/[^\"]*)\"#path=\"../../../\\1\"#'"
+```
 
 ## Layout
 
