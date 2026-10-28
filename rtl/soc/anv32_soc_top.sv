@@ -1,11 +1,24 @@
+// The single SoC top. Every build option is a parameter here: the core, the
+// memory size, the clock and which peripherals exist. A disabled peripheral
+// keeps its bus slot and address range, which then read as zero and ignore
+// writes like an unmapped address, so the memory map and software layout do
+// not change between configurations.
 module anv32_soc_top
     import anv32_bus_pkg::*;
     import anv32_soc_addr_pkg::*;
 #(
-    parameter int unsigned CORE_TYPE   = 1,
+    parameter int unsigned CORE_TYPE   = 2,           // 0 = i1, 1 = im1, 2 = im2
     parameter int unsigned BRAM_ADDR_W = 10,
     parameter int unsigned POR_CYCLES  = 8,
-    parameter              INIT_FILE   = "src/prog"
+    parameter              INIT_FILE   = "src/prog",
+    parameter int unsigned CLK_FREQ    = 27_000_000,  // Hz, for UART/I2C timing
+
+    // Peripherals
+    parameter bit HAS_GPIO    = 1'b1,
+    parameter bit HAS_NN      = 1'b1,
+    parameter bit HAS_SYSCTRL = 1'b1,
+    parameter bit HAS_UART    = 1'b1,
+    parameter bit HAS_I2C     = 1'b1
 )(
     input  logic clk_i,
     input  logic rst_n_i,
@@ -74,14 +87,6 @@ module anv32_soc_top
     logic        i2c_irq;
     logic        nn_accel_irq;
     logic        external_irq;
-
-    logic        nn_accel_hit;
-    logic        nn_accel_ready;
-    logic [31:0] nn_accel_rdata;
-    logic [31:0] nn_rdata_q;
-    logic        nn_scratch_sel;
-    logic        nn_scratch_sel_q;
-    logic [31:0] nn_scratch_rdata;
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_shift <= '0;
@@ -173,10 +178,12 @@ module anv32_soc_top
     ) periph_bus (
         .clk_i  (clk_i),
         .rst_i  (rst_i),
-        .m_req_i(periph_req),
-        .m_rsp_o(periph_rsp),
-        .s_req_o(p_req),
-        .s_rsp_i(p_rsp)
+        .m_req_i (periph_req),
+        .m_rsp_o (periph_rsp),
+        .s_req_o (p_req),
+        .s_rsp_i (p_rsp),
+        .rd_hit_o(),            // only the fast bus splits read data by slave
+        .rd_sel_o()
     );
 
     // ---- Fast slaves ----------------------------------------------------------
@@ -187,88 +194,132 @@ module anv32_soc_top
     assign fast_rsp[FAST_BRAM] = '{ready: 1'b1, fast: 1'b1, rdata: dmem_rdata};
     assign imem_addr           = instr_addr[BRAM_ADDR_W+1:2];
 
-    gpio_periph gpio (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .req_i(fast_req[FAST_GPIO]),
-        .rsp_o(fast_rsp[FAST_GPIO]),
-        .irq_i(gpio_irq_i),
-        .irq_o(gpio_irq_pending)
-    );
+    generate
+        if (HAS_GPIO) begin : g_gpio
+            gpio_periph gpio (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .req_i(fast_req[FAST_GPIO]),
+                .rsp_o(fast_rsp[FAST_GPIO]),
+                .irq_i(gpio_irq_i),
+                .irq_o(gpio_irq_pending)
+            );
+        end else begin : g_no_gpio
+            assign fast_rsp[FAST_GPIO] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign gpio_irq_pending    = 1'b0;
+        end
+    endgenerate
 
     // NN accelerator. Register reads are registered here so they arrive one
     // cycle later like every other slave; scratch reads come straight from
     // the scratch BRAM, which is already registered. Parts of the aperture
     // the accelerator does not decode are accepted and read as zero.
-    nn_accel_periph #(
-        .BASE_ADDR(NN_BASE),
-        .SCRATCH_OFFSET(NN_SCRATCH_BASE - NN_BASE),
-        .SCRATCH_WORDS(4096)
-    ) nn_accel (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .mem_valid_i(fast_req[FAST_NN].valid),
-        .mem_addr_i(fast_req[FAST_NN].addr),
-        .mem_wdata_i(fast_req[FAST_NN].wdata),
-        .mem_we_i(fast_req[FAST_NN].we),
-        .mem_ready_o(nn_accel_ready),
-        .mem_rdata_o(nn_accel_rdata),
-        .mem_hit_o(nn_accel_hit),
-        .scratch_rdata_o(nn_scratch_rdata),
-        .scratch_sel_o(nn_scratch_sel),
-        .irq_o(nn_accel_irq)
-    );
+    generate
+        if (HAS_NN) begin : g_nn
+            logic        nn_accel_hit;
+            logic        nn_accel_ready;
+            logic [31:0] nn_accel_rdata;
+            logic [31:0] nn_rdata_q;
+            logic        nn_scratch_sel;
+            logic        nn_scratch_sel_q;
+            logic [31:0] nn_scratch_rdata;
 
-    always_ff @(posedge clk_i) begin
-        if (rst_i) begin
-            nn_scratch_sel_q <= 1'b0;
-            nn_rdata_q       <= '0;
-        end else begin
-            nn_scratch_sel_q <= nn_scratch_sel;
-            if (fast_req[FAST_NN].valid) nn_rdata_q <= nn_accel_hit ? nn_accel_rdata : '0;
+            nn_accel_periph #(
+                .BASE_ADDR(NN_BASE),
+                .SCRATCH_OFFSET(NN_SCRATCH_BASE - NN_BASE),
+                .SCRATCH_WORDS(4096)
+            ) nn_accel (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .mem_valid_i(fast_req[FAST_NN].valid),
+                .mem_addr_i(fast_req[FAST_NN].addr),
+                .mem_wdata_i(fast_req[FAST_NN].wdata),
+                .mem_we_i(fast_req[FAST_NN].we),
+                .mem_ready_o(nn_accel_ready),
+                .mem_rdata_o(nn_accel_rdata),
+                .mem_hit_o(nn_accel_hit),
+                .scratch_rdata_o(nn_scratch_rdata),
+                .scratch_sel_o(nn_scratch_sel),
+                .irq_o(nn_accel_irq)
+            );
+
+            always_ff @(posedge clk_i) begin
+                if (rst_i) begin
+                    nn_scratch_sel_q <= 1'b0;
+                    nn_rdata_q       <= '0;
+                end else begin
+                    nn_scratch_sel_q <= nn_scratch_sel;
+                    if (fast_req[FAST_NN].valid) nn_rdata_q <= nn_accel_hit ? nn_accel_rdata : '0;
+                end
+            end
+
+            assign fast_rsp[FAST_NN].ready = nn_accel_hit ? nn_accel_ready : 1'b1;
+            assign fast_rsp[FAST_NN].fast  = 1'b0;   // slow: registered at the core boundary
+            assign fast_rsp[FAST_NN].rdata = nn_scratch_sel_q ? nn_scratch_rdata : nn_rdata_q;
+        end else begin : g_no_nn
+            assign fast_rsp[FAST_NN] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign nn_accel_irq      = 1'b0;
         end
-    end
-
-    assign fast_rsp[FAST_NN].ready = nn_accel_hit ? nn_accel_ready : 1'b1;
-    assign fast_rsp[FAST_NN].fast  = 1'b0;   // slow: registered at the core boundary
-    assign fast_rsp[FAST_NN].rdata = nn_scratch_sel_q ? nn_scratch_rdata : nn_rdata_q;
+    endgenerate
 
     // ---- Peripheral slaves --------------------------------------------------
-    sysctrl_periph sysctrl (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .req_i(p_req[PERIPH_SYSCTRL]),
-        .rsp_o(p_rsp[PERIPH_SYSCTRL]),
-        .led_o(led_reg)
-    );
+    generate
+        if (HAS_SYSCTRL) begin : g_sysctrl
+            sysctrl_periph sysctrl (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .req_i(p_req[PERIPH_SYSCTRL]),
+                .rsp_o(p_rsp[PERIPH_SYSCTRL]),
+                .led_o(led_reg)
+            );
+        end else begin : g_no_sysctrl
+            assign p_rsp[PERIPH_SYSCTRL] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign led_reg               = '0;   // LEDs stay off
+        end
 
-    uart_periph #(
-        .CLK_FREQ(27_000_000)
-    ) uart (
-        .clk_i    (clk_i),
-        .rst_i    (rst_i),
-        .req_i    (p_req[PERIPH_UART]),
-        .rsp_o    (p_rsp[PERIPH_UART]),
-        .uart_rx_i(uart_rx_i),
-        .uart_tx_o(uart_tx_o)
-    );
+        if (HAS_UART) begin : g_uart
+            uart_periph #(
+                .CLK_FREQ(CLK_FREQ)
+            ) uart (
+                .clk_i    (clk_i),
+                .rst_i    (rst_i),
+                .req_i    (p_req[PERIPH_UART]),
+                .rsp_o    (p_rsp[PERIPH_UART]),
+                .uart_rx_i(uart_rx_i),
+                .uart_tx_o(uart_tx_o)
+            );
+        end else begin : g_no_uart
+            assign p_rsp[PERIPH_UART] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign uart_tx_o          = 1'b1;   // line idles high
+        end
 
-    i2c_periph #(
-        .CLK_FREQ(27_000_000),
-        .CMD_FIFO_DEPTH(16),
-        .RX_FIFO_DEPTH(8),
-        .SCL_LOW_CYCLES(135),
-        .SCL_HIGH_CYCLES(135),
-        .STRETCH_TIMEOUT_CYCLES(270_000)
-    ) i2c (
-        .clk_i(clk_i),
-        .rst_i(rst_i),
-        .req_i(p_req[PERIPH_I2C]),
-        .rsp_o(p_rsp[PERIPH_I2C]),
-        .sda_io(i2c_sda_io),
-        .scl_io(i2c_scl_io),
-        .irq_o(i2c_irq)
-    );
+        if (HAS_I2C) begin : g_i2c
+            // SCL period = 2 * 135 cycles = 100 kHz at 27 MHz; scale with CLK_FREQ.
+            localparam int unsigned SCL_HALF = CLK_FREQ / 200_000;
+
+            i2c_periph #(
+                .CLK_FREQ(CLK_FREQ),
+                .CMD_FIFO_DEPTH(16),
+                .RX_FIFO_DEPTH(8),
+                .SCL_LOW_CYCLES(SCL_HALF),
+                .SCL_HIGH_CYCLES(SCL_HALF),
+                .STRETCH_TIMEOUT_CYCLES(CLK_FREQ / 100)   // 10 ms
+            ) i2c (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .req_i(p_req[PERIPH_I2C]),
+                .rsp_o(p_rsp[PERIPH_I2C]),
+                .sda_io(i2c_sda_io),
+                .scl_io(i2c_scl_io),
+                .irq_o(i2c_irq)
+            );
+        end else begin : g_no_i2c
+            assign p_rsp[PERIPH_I2C] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign i2c_irq           = 1'b0;
+            assign i2c_sda_io        = 1'bz;    // released; external pull-ups hold the bus idle
+            assign i2c_scl_io        = 1'bz;
+        end
+    endgenerate
 
     // ---- Core -----------------------------------------------------------------
     generate

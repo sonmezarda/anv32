@@ -289,7 +289,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace core-tests riscv-tests arch-test check bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace core-tests soc-configs riscv-tests arch-test check bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -554,6 +554,25 @@ core-tests:
 		--tests "$(TEST_NAMES)" \
 		--out-dir "$(TEST_OUT_DIR)"
 
+# Elaborate anv32_soc_top in every core and with each peripheral removed, so a
+# configuration nobody simulates still builds. Lint only; behaviour is covered
+# by core-tests on the default (everything on) configuration.
+SOC_CONFIGS := \
+	CORE_TYPE=0 CORE_TYPE=1 CORE_TYPE=2 \
+	HAS_GPIO=0 HAS_NN=0 HAS_SYSCTRL=0 HAS_UART=0 HAS_I2C=0 \
+	HAS_GPIO=0,HAS_NN=0,HAS_SYSCTRL=0,HAS_UART=0,HAS_I2C=0
+
+soc-configs:
+	@srcs="$$($(PYTHON) -c "import sys; sys.path.insert(0, 'tools'); import run_core_tests as r; print(' '.join(r.soc_sources()))")"; \
+	for cfg in $(SOC_CONFIGS); do \
+		gflags=$$(printf -- '-G%s ' $$(echo $$cfg | tr ',' ' ')); \
+		printf '  %-58s' "$$cfg"; \
+		$(VERILATOR) --lint-only -sv -Wall -Wno-fatal $(VERILATOR_WARNINGS) \
+			--top-module anv32_soc_top $$gflags $$srcs >/dev/null 2>&1 \
+			|| { echo FAIL; exit 1; }; \
+		echo ok; \
+	done
+
 # Official RISC-V test suites (cloned into build/third_party on first use).
 # riscv-tests are self-checking; riscv-arch-test compares against Spike.
 riscv-tests:
@@ -563,9 +582,9 @@ arch-test:
 	$(PYTHON) tools/run_compliance.py --cores "$(TEST_CORES)" \
 		--suites arch-I,arch-M,arch-privilege --spike "$(SPIKE)"
 
-# Everything that runs without Spike or hardware: unit tests, core/SoC tests,
-# riscv-tests and the benchmark self-checks.
-check: all core-tests riscv-tests bench
+# Everything that runs without Spike or hardware: unit tests, SoC configuration
+# lint, core/SoC tests, riscv-tests and the benchmark self-checks.
+check: all soc-configs core-tests riscv-tests bench
 
 bench:
 	@args=( \
@@ -717,6 +736,7 @@ help:
 	@echo "  make core-tests     Run the self-checking core and SoC tests (sw/tests)"
 	@echo "  make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep"
 	@echo "                       Select cores and tests (TEST_SUITES=core,soc)"
+	@echo "  make soc-configs    Lint anv32_soc_top in every core / peripheral configuration"
 	@echo "  make riscv-tests    Run riscv-tests (rv32ui/um/mi) on all cores"
 	@echo "  make arch-test      Run riscv-arch-test, compared against Spike"
 	@echo "  make check          Unit + core/SoC tests + riscv-tests + benchmarks"

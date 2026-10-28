@@ -50,9 +50,6 @@
         <File path="../../../rtl/peripherals/uart/core/uart_tx.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/uart/uart_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/anv32_soc_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/soc/anv32i1_soc_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/soc/anv32im1_soc_top.sv" type="file.verilog" enable="1"/>
-        <File path="../../../rtl/soc/anv32im2_soc_top.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/bus/anv32_bus_bridge.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/bus/anv32_bus_decoder.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/bus/anv32_bus_regs.sv" type="file.verilog" enable="1"/>

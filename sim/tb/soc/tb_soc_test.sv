@@ -25,11 +25,19 @@ module tb_soc_test #(
 
     always #5 clk_i = ~clk_i;
 
+    // Every build option is pinned here, so the tests do not follow whatever
+    // defaults anv32_soc_top currently carries for an FPGA build.
     anv32_soc_top #(
         .CORE_TYPE(CORE_TYPE),
         .BRAM_ADDR_W(10),
         .POR_CYCLES(4),
-        .INIT_FILE("")
+        .INIT_FILE(""),
+        .CLK_FREQ(27_000_000),
+        .HAS_GPIO(1'b1),
+        .HAS_NN(1'b1),
+        .HAS_SYSCTRL(1'b1),
+        .HAS_UART(1'b1),
+        .HAS_I2C(1'b1)
     ) dut (
         .clk_i(clk_i),
         .rst_n_i(rst_n_i),

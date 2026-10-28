@@ -88,9 +88,21 @@ multiplication, so they retire many more instructions. See
 
 ## SoC
 
-[`rtl/soc/anv32_soc_top.sv`](rtl/soc/anv32_soc_top.sv) picks the core with
-`CORE_TYPE` (0 = i1, 1 = im1, 2 = im2). The wrappers `anv32{i1,im1,im2}_soc_top`
-fix that parameter for the Gowin project.
+[`rtl/soc/anv32_soc_top.sv`](rtl/soc/anv32_soc_top.sv) is the only SoC top,
+and every build option is one of its parameters:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `CORE_TYPE` | `2` | 0 = i1, 1 = im1, 2 = im2 |
+| `BRAM_ADDR_W` | `10` | Word address width of the code/data BRAM |
+| `CLK_FREQ` | `27_000_000` | Clock in Hz; sets UART baud and I2C SCL timing |
+| `HAS_GPIO`, `HAS_NN`, `HAS_SYSCTRL`, `HAS_UART`, `HAS_I2C` | `1` | Include that peripheral |
+
+A disabled peripheral keeps its address range: it reads as zero and ignores
+writes, like an unmapped address, so the memory map and software do not change
+between builds. Its outputs go idle (UART TX high, I2C lines released, IRQ low).
+`make soc-configs` checks that every core and peripheral combination still
+elaborates.
 
 ```mermaid
 flowchart LR
