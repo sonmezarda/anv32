@@ -11,6 +11,7 @@
 //   +prog=<file>        word hex image, loaded at RESET_PC (RAM wraps every 4 MiB)
 //   +max_cycles=<n>     timeout (default 200000)
 //   +mem_wait           random data-port wait states (cores with mem_ready only)
+//   +mem_wait_fixed=<n> every data access waits exactly n cycles before ready
 //   +tohost=<hex>       riscv-tests: a store here ends the test (1 = pass)
 //   +signature=<file> +sig_begin=<hex> +sig_end=<hex>
 //                       dump RAM [sig_begin, sig_end) at the end of the test
@@ -98,14 +99,21 @@ module tb_core_test #(
 
     // ---- Optional data-port wait states ------------------------------------
     logic        wait_en = 1'b0;
+    int unsigned wait_fixed = 0;      // 0 = off; else wait cycles per access
+    int unsigned pend_cycles = 0;     // cycles the current request has waited
     logic [15:0] lfsr = 16'hACE1;
 
     always_ff @(posedge clk) begin
         lfsr <= {lfsr[14:0], lfsr[15] ^ lfsr[13] ^ lfsr[12] ^ lfsr[10]};
+        if (!mem_valid || mem_fire) pend_cycles <= 0;
+        else                        pend_cycles <= pend_cycles + 1;
     end
 
-    // About one cycle in four is a wait state while a request is pending.
-    assign mem_ready = !(wait_en && mem_valid && lfsr[0] && lfsr[5]);
+    // Random: about one cycle in four is a wait state while a request is
+    // pending. Fixed: every access is held off for exactly wait_fixed cycles,
+    // so each load/store is guaranteed to stall the pipeline.
+    assign mem_ready = (wait_fixed != 0) ? !(mem_valid && pend_cycles < wait_fixed)
+                                         : !(wait_en && mem_valid && lfsr[0] && lfsr[5]);
 
     // ---- Test device -------------------------------------------------------
     logic        done = 1'b0;
@@ -169,6 +177,7 @@ module tb_core_test #(
         $readmemh(prog, ram);
         if (!$value$plusargs("max_cycles=%d", max_cycles)) max_cycles = 200000;
         wait_en = $test$plusargs("mem_wait");
+        if (!$value$plusargs("mem_wait_fixed=%d", wait_fixed)) wait_fixed = 0;
         tohost_en = $value$plusargs("tohost=%h", tohost_addr);
 
         repeat (3) @(posedge clk);

@@ -24,6 +24,13 @@
     "max_cycles": 2000
   },
   {
+    "name": "jump_mem_stall",
+    "src": "sw/tests/jump_in_mem_stall.S",
+    "march": "rv32i_zicsr",
+    "max_cycles": 4000,
+    "mem_wait_fixed": [1, 2, 3]
+  },
+  {
     "name": "irq_basic",
     "src": "sw/tests/irq_basic.S",
     "march": "rv32i_zicsr",

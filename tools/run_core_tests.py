@@ -128,10 +128,14 @@ def build_tb(args: argparse.Namespace, repo: Path, suite: str, core: str, out_di
     return mdir / f"V{top}"
 
 
-def run_test(args: argparse.Namespace, repo: Path, sim: Path, prog: Path, test: dict, mem_wait: bool) -> dict:
+def run_test(args: argparse.Namespace, repo: Path, sim: Path, prog: Path, test: dict,
+             mem_wait: bool | int) -> dict:
+    """mem_wait: False = none, True = random wait states, n = every access waits n cycles."""
     cmd = [str(sim), f"+prog={prog}", f"+max_cycles={test.get('max_cycles', 200000)}"]
-    if mem_wait:
+    if mem_wait is True:
         cmd.append("+mem_wait")
+    elif mem_wait:
+        cmd.append(f"+mem_wait_fixed={mem_wait}")
     proc = subprocess.run(cmd, cwd=repo, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if args.verbose:
         print(proc.stdout, end="")
@@ -193,15 +197,16 @@ def main() -> int:
         for core in cores:
             print(f"BUILD suite={suite} core={core}", flush=True)
             sim = build_tb(args, repo, suite, core, out_dir)
-            variants = [False]
-            if suite == "core" and "mem_ready" in CORE_FEATURES[core] and not args.no_mem_wait:
-                variants.append(True)
+            waits = suite == "core" and "mem_ready" in CORE_FEATURES[core] and not args.no_mem_wait
             for test in tests[suite]:
                 if not set(test["requires"]).issubset(CORE_FEATURES[core]):
                     continue
                 prog = images[test["name"]]
                 if suite == "core":
                     prog = prog.with_suffix(".hex")
+                # A test can also ask for fixed wait states on every access, so a
+                # stall is guaranteed rather than left to the random pattern.
+                variants = [False] + ([True, *test.get("mem_wait_fixed", [])] if waits else [])
                 for mem_wait in variants:
                     result = run_test(args, repo, sim, prog, test, mem_wait)
                     result.update({"test": test["name"], "core": core, "mem_wait": mem_wait})
@@ -214,7 +219,9 @@ def main() -> int:
     print(f"{'-' * 18} {'-' * 9} {'-' * 5} {'-' * 8} {'-' * 4} {'-' * 7}")
     for r in results:
         code = "" if r["status"] == "PASS" else str(r["code"])
-        print(f"{r['test']:<18} {r['core']:<9} {'yes' if r['mem_wait'] else '':<5} "
+        mw = r["mem_wait"]
+        wait = ("yes" if mw else "") if isinstance(mw, bool) else f"={mw}"
+        print(f"{r['test']:<18} {r['core']:<9} {wait:<5} "
               f"{r['status']:<8} {code:>4} {r['cycles']:>7}")
 
     failed = [r for r in results if r["status"] != "PASS"]
