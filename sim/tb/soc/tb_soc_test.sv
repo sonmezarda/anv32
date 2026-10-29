@@ -33,6 +33,8 @@ module tb_soc_test #(
         .POR_CYCLES(4),
         .INIT_FILE(""),
         .CLK_FREQ(27_000_000),
+        .MTIME_FREQ(1_000_000),     // one mtime tick every 27 clocks
+        .HAS_CLINT(1'b1),
         .HAS_GPIO(1'b1),
         .HAS_NN(1'b1),
         .HAS_SYSCTRL(1'b1),

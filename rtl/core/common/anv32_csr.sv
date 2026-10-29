@@ -18,7 +18,9 @@ module anv32_csr
 
     input  logic            retire_i,       // an instruction retires this cycle
 
-    input  logic            ext_irq_i,
+    input  logic            ext_irq_i,      // MEIP
+    input  logic            timer_irq_i,    // MTIP (CLINT mtime >= mtimecmp)
+    input  logic            sw_irq_i,       // MSIP (CLINT msip)
     input  logic            trap_i,
     input  logic [XLEN-1:0] trap_pc_i,
     input  logic [XLEN-1:0] trap_cause_i,
@@ -27,27 +29,38 @@ module anv32_csr
 
     output logic [XLEN-1:0] mtvec_o,
     output logic [XLEN-1:0] mepc_o,
-    output logic            irq_pending_o
+    output logic            irq_pending_o,
+    output logic [XLEN-1:0] irq_cause_o     // mcause of the interrupt to take
 );
     logic [XLEN-1:0] mstatus_q, mtvec_q, mepc_q, mcause_q, mtval_q, mie_q, mscratch_q;
     logic [XLEN-1:0] mstatus_d, mtvec_d, mepc_d, mcause_d, mtval_d, mie_d, mscratch_d;
     logic [63:0]     mcycle_q, minstret_q;
     logic [63:0]     mcycle_d, minstret_d;
     logic [XLEN-1:0] mip;
+    logic [XLEN-1:0] irq_enabled;
 
     assign mtvec_o = mtvec_q;
     assign mepc_o  = mepc_q;
 
-    // The external interrupt is the only interrupt source
+    // Machine external, timer and software interrupts. The pending bits are
+    // read-only: they follow their sources (software clears MSIP/MTIP at the
+    // CLINT, MEIP at the peripheral that raised it).
     always_comb begin
         mip = '0;
+        mip[MIP_MSIP_BIT] = sw_irq_i;
+        mip[MIP_MTIP_BIT] = timer_irq_i;
         mip[MIP_MEIP_BIT] = ext_irq_i;
     end
 
-    assign irq_pending_o =
-        mstatus_q[MSTATUS_MIE_BIT] &&
-        mie_q[MIE_MEIE_BIT] &&
-        mip[MIP_MEIP_BIT];
+    assign irq_enabled   = mie_q & mip;
+    assign irq_pending_o = mstatus_q[MSTATUS_MIE_BIT] && (irq_enabled != '0);
+
+    // Highest-priority enabled source, in the privileged spec order MEI > MSI > MTI
+    always_comb begin
+        if      (irq_enabled[MIP_MEIP_BIT]) irq_cause_o = MCAUSE_MACHINE_EXTERNAL_IRQ;
+        else if (irq_enabled[MIP_MSIP_BIT]) irq_cause_o = MCAUSE_MACHINE_SOFTWARE_IRQ;
+        else                                irq_cause_o = MCAUSE_MACHINE_TIMER_IRQ;
+    end
 
     always_comb begin
         unique case (csr_raddr_i)

@@ -559,14 +559,15 @@ core-tests:
 # by core-tests on the default (everything on) configuration.
 SOC_CONFIGS := \
 	CORE_TYPE=0 CORE_TYPE=1 CORE_TYPE=2 \
-	HAS_GPIO=0 HAS_NN=0 HAS_SYSCTRL=0 HAS_UART=0 HAS_I2C=0 \
-	HAS_GPIO=0,HAS_NN=0,HAS_SYSCTRL=0,HAS_UART=0,HAS_I2C=0
+	HAS_CLINT=0 HAS_GPIO=0 HAS_NN=0 HAS_SYSCTRL=0 HAS_UART=0 HAS_I2C=0 \
+	HAS_CLINT=0,HAS_GPIO=0,HAS_NN=0,HAS_SYSCTRL=0,HAS_UART=0,HAS_I2C=0 \
+	MTIME_FREQ=27000000
 
 soc-configs:
 	@srcs="$$($(PYTHON) -c "import sys; sys.path.insert(0, 'tools'); import run_core_tests as r; print(' '.join(r.soc_sources()))")"; \
 	for cfg in $(SOC_CONFIGS); do \
 		gflags=$$(printf -- '-G%s ' $$(echo $$cfg | tr ',' ' ')); \
-		printf '  %-58s' "$$cfg"; \
+		printf '  %-68s' "$$cfg"; \
 		$(VERILATOR) --lint-only -sv -Wall -Wno-fatal $(VERILATOR_WARNINGS) \
 			--top-module anv32_soc_top $$gflags $$srcs >/dev/null 2>&1 \
 			|| { echo FAIL; exit 1; }; \

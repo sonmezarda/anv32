@@ -95,8 +95,8 @@ CORE_DEFINES = {
 
 CORE_FEATURES = {
     "anv32i1": {"mem_ready"},
-    "anv32im1": {"m", "mem_ready"},
-    "anv32im2": {"m", "mem_ready"},
+    "anv32im1": {"m", "mem_ready", "mtimer"},   # mtimer: CLINT timer/software IRQs
+    "anv32im2": {"m", "mem_ready", "mtimer"},
 }
 
 RESULT_RE = re.compile(r"^BENCH_RESULT\s+(?P<body>.*)$")

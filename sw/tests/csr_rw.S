@@ -70,7 +70,7 @@ _start:
     CHECK_EQ t0, 0xFFFFFFFC, 17         // direct mode only
     csrw    mie, a0
     csrr    t0, mie
-    CHECK_EQ t0, MIE_MEIE, 18           // external interrupt only
+    CHECK_EQ t0, MIE_MSIE | MIE_MTIE | MIE_MEIE, 18   // machine sw/timer/external
     csrw    mstatus, a0
     csrr    t0, mstatus
     CHECK_EQ t0, MSTATUS_MPP_M | MSTATUS_MPIE | MSTATUS_MIE, 19

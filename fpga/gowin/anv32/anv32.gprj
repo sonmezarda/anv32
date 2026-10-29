@@ -54,6 +54,7 @@
         <File path="../../../rtl/soc/bus/anv32_bus_decoder.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/bus/anv32_bus_regs.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/soc/bus/anv32_bus_read_pipe.sv" type="file.verilog" enable="1"/>
+        <File path="../../../rtl/peripherals/clint/anv32_clint.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/gpio/gpio_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/sysctrl/sysctrl_periph.sv" type="file.verilog" enable="1"/>
         <File path="../../../rtl/peripherals/uart/uart_periph.sv" type="file.verilog" enable="1"/>

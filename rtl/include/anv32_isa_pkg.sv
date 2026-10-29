@@ -106,6 +106,8 @@ package anv32_isa_pkg;
     localparam logic [XLEN-1:0] MISA_M     = 32'h0000_1000;
 
     // Machine-mode interrupt/CSR bit definitions
+    localparam logic [XLEN-1:0] MCAUSE_MACHINE_SOFTWARE_IRQ = {1'b1, 31'd3};
+    localparam logic [XLEN-1:0] MCAUSE_MACHINE_TIMER_IRQ    = {1'b1, 31'd7};
     localparam logic [XLEN-1:0] MCAUSE_MACHINE_EXTERNAL_IRQ = {1'b1, 31'd11};
 
     localparam int unsigned MSTATUS_MIE_BIT  = 3;      // Machine Interrupt Enable
@@ -113,7 +115,11 @@ package anv32_isa_pkg;
     localparam int unsigned MSTATUS_MPP_LSB  = 11;     // Machine Previous Privilege
     localparam int unsigned MSTATUS_MPP_MSB  = 12;
 
+    localparam int unsigned MIE_MSIE_BIT = 3;          // Machine Software Interrupt Enable
+    localparam int unsigned MIE_MTIE_BIT = 7;          // Machine Timer Interrupt Enable
     localparam int unsigned MIE_MEIE_BIT = 11;         // Machine External Interrupt Enable
+    localparam int unsigned MIP_MSIP_BIT = 3;          // Machine Software Interrupt Pending
+    localparam int unsigned MIP_MTIP_BIT = 7;          // Machine Timer Interrupt Pending
     localparam int unsigned MIP_MEIP_BIT = 11;         // Machine External Interrupt Pending
 
     localparam logic [1:0] PRIV_U = 2'b00;
@@ -368,6 +374,8 @@ package anv32_isa_pkg;
             end
             CSR_MIE: begin
                 legal = '0;
+                legal[MIE_MSIE_BIT] = value[MIE_MSIE_BIT];
+                legal[MIE_MTIE_BIT] = value[MIE_MTIE_BIT];
                 legal[MIE_MEIE_BIT] = value[MIE_MEIE_BIT];
             end
             CSR_MTVEC,                                 // direct mode only

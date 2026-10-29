@@ -7,6 +7,8 @@ module anv32im1_top
 )(
     input  logic            clk_i, rst_i, stall_i, pc_jmp_en_i,
     input  logic            ext_irq_i,
+    input  logic            timer_irq_i,    // CLINT machine timer interrupt
+    input  logic            sw_irq_i,       // CLINT machine software interrupt
     input  logic [31:0]     pc_jmp_addr_i,
     output logic [31:0]     instr_o, pc_o,
     output logic            instr_valid_o,
@@ -72,6 +74,7 @@ module anv32im1_top
     logic                   mret_req;
     logic [XLEN-1:0]        trap_target, mret_target;
     logic                   irq_pending, irq_req, irq_csr_hazard;
+    logic [XLEN-1:0]        irq_cause;
     logic                   csr_serialize;
     logic [XLEN-1:0]        irq_pc;
     logic                   csr_trap;
@@ -135,7 +138,7 @@ module anv32im1_top
     always_comb begin : csr_trap_mux_comb
         csr_trap       = trap_req || irq_req;
         csr_trap_pc    = trap_req ? trap_pc    : irq_pc;
-        csr_trap_cause = trap_req ? trap_cause : MCAUSE_MACHINE_EXTERNAL_IRQ;
+        csr_trap_cause = trap_req ? trap_cause : irq_cause;
         csr_trap_tval  = trap_req ? trap_tval  : '0;
     end
 
@@ -351,6 +354,8 @@ module anv32im1_top
         .csr_wdata_i  (csr_wdata),
         .retire_i     (minstr.valid && !stall_w_eff),
         .ext_irq_i    (ext_irq_i),
+        .timer_irq_i  (timer_irq_i),
+        .sw_irq_i     (sw_irq_i),
         .mtvec_o      (mtvec),
         .mepc_o       (mepc),
         .trap_i       (csr_trap),
@@ -358,6 +363,7 @@ module anv32im1_top
         .trap_cause_i (csr_trap_cause),
         .trap_tval_i  (csr_trap_tval),
         .mret_i       (mret_req),
-        .irq_pending_o(irq_pending)
+        .irq_pending_o(irq_pending),
+        .irq_cause_o  (irq_cause)
     );
 endmodule

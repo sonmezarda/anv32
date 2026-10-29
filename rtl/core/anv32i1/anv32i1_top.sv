@@ -6,6 +6,10 @@ module anv32i1_top
 )(
     input  logic            clk_i, rst_i, stall_i, pc_jmp_en_i,
     input  logic            ext_irq_i,
+    // Same interface as the im cores, but anv32i1 stays external-interrupt only
+    // (see docs/roadmap.md): the CLINT timer and software interrupts are ignored.
+    input  logic            timer_irq_i,
+    input  logic            sw_irq_i,
     input  logic [31:0]     pc_jmp_addr_i,
     output logic [31:0]     instr_o, pc_o,
     output logic            instr_valid_o,
@@ -382,6 +386,8 @@ module anv32i1_top
         .csr_wdata_i (csr_wdata),
         .retire_i    (minstr.valid && !stall_w_eff),
         .ext_irq_i   (ext_irq_i),
+        .timer_irq_i (1'b0),    // anv32i1 takes only the external interrupt
+        .sw_irq_i    (1'b0),
         .mtvec_o     (mtvec),
         .mepc_o      (mepc),
 
@@ -390,6 +396,7 @@ module anv32i1_top
         .trap_cause_i(csr_trap_cause),
         .trap_tval_i (csr_trap_tval),
         .mret_i      (mret_req),
-        .irq_pending_o(irq_pending)
+        .irq_pending_o(irq_pending),
+        .irq_cause_o ()         // always external here
     );
 endmodule

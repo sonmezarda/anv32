@@ -3,6 +3,8 @@
 // Runs one self-checking program from sw/tests on a core. The program is
 // loaded at run time (+prog=<word hex>), so one build per core covers every
 // test. Results come back through a small test device; see sw/tests/test.h.
+// The real CLINT (anv32_clint) sits at 0x0200_0000, with mtime ticking every
+// 4 clocks, and drives the core's timer and software interrupts.
 //
 // It also runs riscv-tests (pass/fail written to tohost) and riscv-arch-test
 // (signature dumped for comparison with a reference model).
@@ -15,7 +17,9 @@
 //   +tohost=<hex>       riscv-tests: a store here ends the test (1 = pass)
 //   +signature=<file> +sig_begin=<hex> +sig_end=<hex>
 //                       dump RAM [sig_begin, sig_end) at the end of the test
-module tb_core_test #(
+module tb_core_test
+    import anv32_bus_pkg::*;
+#(
     parameter logic [31:0] RESET_PC = 32'h0000_0000
 );
     localparam int unsigned RAM_ADDR_W = 22;            // 4 MiB, wraps above
@@ -31,6 +35,8 @@ module tb_core_test #(
     logic clk = 1'b0;
     logic rst = 1'b1;
     logic ext_irq = 1'b0;
+    logic timer_irq;
+    logic sw_irq;
 
     logic [31:0] instr_addr;
     logic [31:0] instr_rdata;
@@ -59,6 +65,8 @@ module tb_core_test #(
         .pc_jmp_en_i(1'b0),
         .pc_jmp_addr_i('0),
         .ext_irq_i(ext_irq),
+        .timer_irq_i(timer_irq),
+        .sw_irq_i(sw_irq),
         .pc_o(),
         .instr_o(),
         .instr_valid_o(),
@@ -74,28 +82,53 @@ module tb_core_test #(
 
     // ---- Memory: synchronous reads like the FPGA BRAM ----------------------
     logic [31:0] ram [0:RAM_WORDS-1];
+    logic [31:0] mem_rdata_q;
     logic        test_sel;
+    logic        clint_sel, clint_sel_q;
+    bus_req_t    clint_req;
+    bus_rsp_t    clint_rsp;
     logic        mem_fire;
     int unsigned cycle = 0;
 
-    assign test_sel = (mem_addr[31:28] == TEST_REGION);
-    assign mem_fire = mem_valid && mem_ready;
+    assign test_sel  = (mem_addr[31:28] == TEST_REGION);
+    assign clint_sel = (mem_addr[31:16] == 16'h0200);
+    assign mem_fire  = mem_valid && mem_ready;
+    // The CLINT registers its own read data, also one cycle after the access
+    assign mem_rdata = clint_sel_q ? clint_rsp.rdata : mem_rdata_q;
 
     always_ff @(posedge clk) begin
         instr_rdata <= ram[instr_addr[RAM_ADDR_W-1:2]];
+        clint_sel_q <= clint_sel;
 
         if (test_sel) begin
-            mem_rdata <= (mem_addr[7:0] == TEST_CYCLE) ? cycle : 32'b0;
+            mem_rdata_q <= (mem_addr[7:0] == TEST_CYCLE) ? cycle : 32'b0;
         end else begin
-            mem_rdata <= ram[mem_addr[RAM_ADDR_W-1:2]];
+            mem_rdata_q <= ram[mem_addr[RAM_ADDR_W-1:2]];
         end
 
-        if (mem_fire && !test_sel) begin
+        if (mem_fire && !test_sel && !clint_sel) begin
             for (int i = 0; i < 4; i++) begin
                 if (mem_we[i]) ram[mem_addr[RAM_ADDR_W-1:2]][i*8 +: 8] <= mem_wdata[i*8 +: 8];
             end
         end
     end
+
+    // ---- CLINT at 0x0200_0000 ----------------------------------------------
+    // The request is shown only on the transfer cycle, so a wait state does
+    // not repeat a write. CLK_FREQ/MTIME_FREQ = 4: mtime ticks every 4 clocks.
+    assign clint_req = '{valid: mem_fire && clint_sel, addr: mem_addr, wdata: mem_wdata, we: mem_we};
+
+    anv32_clint #(
+        .CLK_FREQ  (4),
+        .MTIME_FREQ(1)
+    ) clint (
+        .clk_i      (clk),
+        .rst_i      (rst),
+        .req_i      (clint_req),
+        .rsp_o      (clint_rsp),
+        .timer_irq_o(timer_irq),
+        .sw_irq_o   (sw_irq)
+    );
 
     // ---- Optional data-port wait states ------------------------------------
     logic        wait_en = 1'b0;

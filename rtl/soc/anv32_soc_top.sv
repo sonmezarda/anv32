@@ -12,8 +12,10 @@ module anv32_soc_top
     parameter int unsigned POR_CYCLES  = 8,
     parameter              INIT_FILE   = "src/prog",
     parameter int unsigned CLK_FREQ    = 27_000_000,  // Hz, for UART/I2C timing
+    parameter int unsigned MTIME_FREQ  = 1_000_000,   // Hz, CLINT mtime rate; must divide CLK_FREQ
 
     // Peripherals
+    parameter bit HAS_CLINT   = 1'b1,
     parameter bit HAS_GPIO    = 1'b1,
     parameter bit HAS_NN      = 1'b1,
     parameter bit HAS_SYSCTRL = 1'b1,
@@ -39,11 +41,13 @@ module anv32_soc_top
     localparam int unsigned FAST_BRAM   = 1;
     localparam int unsigned FAST_NN     = 2;
     localparam int unsigned FAST_PERIPH = 3;
-    localparam int unsigned FAST_N      = 4;
-    localparam logic [FAST_N-1:0][31:0] FAST_BASE =     // index 3 .. 0
-        {MMIO_BASE, NN_BASE, BRAM_BASE, GPIO0_BASE};
+    localparam int unsigned FAST_CLINT  = 4;
+    localparam int unsigned FAST_N      = 5;
+    localparam logic [FAST_N-1:0][31:0] FAST_BASE =     // index 4 .. 0
+        {CLINT_BASE, MMIO_BASE, NN_BASE, BRAM_BASE, GPIO0_BASE};
     localparam logic [FAST_N-1:0][31:0] FAST_MASK =
-        {~(MMIO_SIZE - 1), ~(NN_SIZE - 1), ~(BRAM_SIZE - 1), ~(MMIO_SLOT_SIZE - 1)};
+        {~(CLINT_SIZE - 1), ~(MMIO_SIZE - 1), ~(NN_SIZE - 1), ~(BRAM_SIZE - 1),
+         ~(MMIO_SLOT_SIZE - 1)};
 
     // Peripheral bus: behind a register slice, one extra cycle per access
     localparam int unsigned PERIPH_SYSCTRL = 0;
@@ -87,6 +91,8 @@ module anv32_soc_top
     logic        i2c_irq;
     logic        nn_accel_irq;
     logic        external_irq;
+    logic        clint_timer_irq;   // MTIP
+    logic        clint_sw_irq;      // MSIP
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
         if (!rst_n_i) por_shift <= '0;
@@ -193,6 +199,28 @@ module anv32_soc_top
     assign dmem_we             = fast_req[FAST_BRAM].valid ? fast_req[FAST_BRAM].we : 4'b0;
     assign fast_rsp[FAST_BRAM] = '{ready: 1'b1, fast: 1'b1, rdata: dmem_rdata};
     assign imem_addr           = instr_addr[BRAM_ADDR_W+1:2];
+
+    // CLINT: machine timer and software interrupt, wired straight to the core
+    // (not through the external interrupt line).
+    generate
+        if (HAS_CLINT) begin : g_clint
+            anv32_clint #(
+                .CLK_FREQ  (CLK_FREQ),
+                .MTIME_FREQ(MTIME_FREQ)
+            ) clint (
+                .clk_i      (clk_i),
+                .rst_i      (rst_i),
+                .req_i      (fast_req[FAST_CLINT]),
+                .rsp_o      (fast_rsp[FAST_CLINT]),
+                .timer_irq_o(clint_timer_irq),
+                .sw_irq_o   (clint_sw_irq)
+            );
+        end else begin : g_no_clint
+            assign fast_rsp[FAST_CLINT] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign clint_timer_irq      = 1'b0;
+            assign clint_sw_irq         = 1'b0;
+        end
+    endgenerate
 
     generate
         if (HAS_GPIO) begin : g_gpio
@@ -331,6 +359,8 @@ module anv32_soc_top
                 .pc_jmp_en_i(1'b0),
                 .pc_jmp_addr_i(32'b0),
                 .ext_irq_i(external_irq),
+                .timer_irq_i(clint_timer_irq),
+                .sw_irq_i(clint_sw_irq),
                 .instr_o(),
                 .pc_o(),
                 .instr_valid_o(),
@@ -351,6 +381,8 @@ module anv32_soc_top
                 .pc_jmp_en_i(1'b0),
                 .pc_jmp_addr_i(32'b0),
                 .ext_irq_i(external_irq),
+                .timer_irq_i(clint_timer_irq),
+                .sw_irq_i(clint_sw_irq),
                 .instr_o(),
                 .pc_o(),
                 .instr_valid_o(),
@@ -371,6 +403,8 @@ module anv32_soc_top
                 .pc_jmp_en_i(1'b0),
                 .pc_jmp_addr_i(32'b0),
                 .ext_irq_i(external_irq),
+                .timer_irq_i(clint_timer_irq),
+                .sw_irq_i(clint_sw_irq),
                 .instr_o(),
                 .pc_o(),
                 .instr_valid_o(),

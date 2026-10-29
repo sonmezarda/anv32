@@ -32,7 +32,11 @@ nested interrupts, a debug module, accelerator interfaces.
 - Zbs (single-bit instructions: `bset`, `bclr`, `binv`, `bext`), and later
   other bit-manipulation extensions (Zba, Zbb)
 - Access-fault traps on bus errors
-- `mtvec` vectored mode and a timer interrupt (CLINT-style `mtime`/`mtimecmp`)
+- `mtvec` vectored mode (the CLINT timer and software interrupts are done on
+  `anv32im1`/`anv32im2`)
+- `time`/`timeh` CSRs (Zicntr `rdtime`) as a shadow of the CLINT `mtime`
+- An interrupt controller and general-purpose timers (alarms, PWM, capture)
+  that share the CLINT `mtime` as their time base
 - Trigger CSRs (Sdtrig) and a debug module
 - Spike diff support for `anv32im2` (the trace flow currently runs `anv32im1`)
 

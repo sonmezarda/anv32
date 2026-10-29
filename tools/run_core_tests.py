@@ -20,6 +20,12 @@ from run_benchmarks import CORE_DEFINES, CORE_FEATURES, CORE_SOURCES, QUIET_WARN
 
 CORE_TYPES = {"anv32i1": 0, "anv32im1": 1, "anv32im2": 2}
 
+# tb_core_test puts the real CLINT next to the bare core
+CORE_TB_SOURCES = [
+    "rtl/include/anv32_bus_pkg.sv",
+    "rtl/peripherals/clint/anv32_clint.sv",
+]
+
 SOC_SOURCES = [
     "rtl/include/anv32_bus_pkg.sv",
     "rtl/include/anv32_soc_addr_pkg.sv",
@@ -40,6 +46,7 @@ SOC_SOURCES = [
     "rtl/soc/bus/anv32_bus_bridge.sv",
     "rtl/soc/bus/anv32_bus_regs.sv",
     "rtl/soc/bus/anv32_bus_read_pipe.sv",
+    "rtl/peripherals/clint/anv32_clint.sv",
     "rtl/peripherals/sysctrl/sysctrl_periph.sv",
     "rtl/peripherals/gpio/gpio_periph.sv",
     "rtl/peripherals/uart/uart_periph.sv",
@@ -108,7 +115,7 @@ def build_tb(args: argparse.Namespace, repo: Path, suite: str, core: str, out_di
     else:
         top = "tb_core_test"
         design = [f"-D{CORE_DEFINES[core]}", f"-GRESET_PC=32'h{reset_pc:08x}",
-                  *CORE_SOURCES[core], "sim/tb/common/tb_core_test.sv"]
+                  *CORE_SOURCES[core], *CORE_TB_SOURCES, "sim/tb/common/tb_core_test.sv"]
     run(
         [
             args.verilator,

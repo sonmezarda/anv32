@@ -9,6 +9,7 @@ addresses assigned but no hardware behind them yet.
 | --- | ---: | --- |
 | `0x0000_0000` - `0x0000_FFFF` | 64 KiB | On-chip BRAM (4 KiB populated in the current build) |
 | `0x0001_0000` - `0x0001_FFFF` | 64 KiB | Reserved boot ROM or extra local RAM |
+| `0x0200_0000` - `0x0200_FFFF` | 64 KiB | CLINT: machine timer and software interrupt |
 | `0x1000_0000` - `0x1000_FFFF` | 64 KiB | Low-speed MMIO peripherals |
 | `0x1001_0000` - `0x1001_FFFF` | 64 KiB | NN accelerator aperture |
 | `0x1002_0000` - `0x1002_FFFF` | 64 KiB | Reserved: DMA / stream engine |
@@ -38,18 +39,23 @@ Low-speed peripherals use 4 KiB slots under `0x1000_0000`.
 
 The core's data port is a valid/ready bus (`rtl/include/anv32_bus_pkg.sv`).
 A transfer happens on a cycle where both `valid` and `ready` are high, and
-read data comes back on the following cycle. Slaves are split into two tiers:
+read data comes back on the following cycle. Wait states per access:
 
-| Tier | Slaves | Wait states |
-| --- | --- | ---: |
-| Fast | BRAM, NN accelerator, GPIO0 | 0 |
-| Peripheral | SYSCTRL, UART0, I2C0 | 1 |
+| Slaves | Write | Read |
+| --- | ---: | ---: |
+| BRAM, GPIO0 | 0 | 0 |
+| NN accelerator, CLINT | 0 | 1 |
+| SYSCTRL, UART0, I2C0 | 1 | 2 |
 
-The fast tier hangs directly off the first address decoder. The peripheral
-tier sits behind a register slice (`rtl/soc/bus/anv32_bus_bridge.sv`) and a
-second decoder, so the slow peripherals stay off the core's timing path.
-GPIO0 is in the MMIO block but lives on the fast tier so that pin I/O does
-not pay the extra cycle. The timer will go there as well.
+BRAM, GPIO0, the NN accelerator and the CLINT hang directly off the first
+address decoder. SYSCTRL, UART0 and I2C0 sit behind a register slice
+(`rtl/soc/bus/anv32_bus_bridge.sv`) and a second decoder, which costs one
+cycle per access. Each slave also declares whether its read data may reach
+the core combinationally (`bus_rsp_t.fast`): only BRAM and GPIO0 do. Every
+other read is registered at the core boundary
+(`rtl/soc/bus/anv32_bus_read_pipe.sv`), one more cycle, so slow read paths
+stay off the core's load/forwarding timing path. GPIO0 is in the MMIO block
+but lives on the fast tier so that pin I/O does not pay those cycles.
 
 ### Atomic aliases
 
@@ -72,6 +78,25 @@ give them no useful meaning, so write those at the normal offset. SYSCTRL,
 GPIO0 and UART0 decode the aliases through the shared register front end
 (`rtl/soc/bus/anv32_bus_regs.sv`). I2C0 still uses its own register decode
 and does not support them yet.
+
+## CLINT
+
+The core-local interruptor uses the SiFive CLINT / RISC-V ACLINT layout and
+base address, so FreeRTOS, OpenSBI and Linux drivers need no changes.
+
+| Offset | Register | |
+| --- | --- | --- |
+| `0x0000` | `msip` | bit 0 raises the machine software interrupt (`mcause` = `0x8000_0003`) |
+| `0x4000` / `0x4004` | `mtimecmp` low / high | the machine timer interrupt (`mcause` = `0x8000_0007`) is pending while `mtime >= mtimecmp` |
+| `0xBFF8` / `0xBFFC` | `mtime` low / high | 64-bit, writable, counts at `MTIME_FREQ` |
+
+`mtime` counts at the SoC parameter `MTIME_FREQ` (default 1 MHz, one tick per
+microsecond; it must divide `CLK_FREQ`). `mtimecmp` resets to all ones, so the
+timer does not fire before software programs it. The interrupts are wired
+straight to the core's `mip.MTIP` / `mip.MSIP`, not through the external
+interrupt line; the priority is external > software > timer. `anv32i1` takes
+only the external interrupt. `sw/include/anv32_clint.h` has the 64-bit
+`mtime` read and `mtimecmp` write sequences.
 
 ## Register Status
 
@@ -106,7 +131,7 @@ low-speed peripheral slots. They get separate apertures.
 ## Source Headers
 
 - C global map constants: `sw/include/anv32_mmio.h`
-- C register layouts: `sw/include/anv32_sysctrl.h`, `sw/include/anv32_gpio.h`,
+- C register layouts: `sw/include/anv32_clint.h`, `sw/include/anv32_sysctrl.h`, `sw/include/anv32_gpio.h`,
   `sw/include/anv32_uart.h`, `sw/include/anv32_i2c.h`, and
   `sw/include/anv32_nn.h`
 - SystemVerilog global map constants: `rtl/include/anv32_soc_addr_pkg.sv`

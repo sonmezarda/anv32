@@ -7,6 +7,11 @@ package anv32_soc_addr_pkg;
     localparam logic [31:0] BOOTROM_BASE     = 32'h0001_0000;
     localparam logic [31:0] BOOTROM_SIZE     = 32'h0001_0000;
 
+    // Core-local interruptor (machine timer + software interrupt). Conventional
+    // SiFive CLINT / ACLINT base and layout, as used by QEMU virt and OpenSBI.
+    localparam logic [31:0] CLINT_BASE       = 32'h0200_0000;
+    localparam logic [31:0] CLINT_SIZE       = 32'h0001_0000;
+
     localparam logic [31:0] MMIO_BASE        = 32'h1000_0000;
     localparam logic [31:0] MMIO_SIZE        = 32'h0001_0000;
     localparam logic [31:0] MMIO_SLOT_SIZE   = 32'h0000_1000;

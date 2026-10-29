@@ -15,6 +15,10 @@
 #define ANV32_BOOTROM_BASE          0x00010000u
 #define ANV32_BOOTROM_SIZE          0x00010000u
 
+/* Core-local interruptor: machine timer and software interrupt (anv32_clint.h) */
+#define ANV32_CLINT_BASE            0x02000000u
+#define ANV32_CLINT_SIZE            0x00010000u
+
 #define ANV32_MMIO_BASE             0x10000000u
 #define ANV32_MMIO_SIZE             0x00010000u
 #define ANV32_MMIO_SLOT_SIZE        0x00001000u

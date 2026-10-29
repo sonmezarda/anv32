@@ -96,7 +96,8 @@ and every build option is one of its parameters:
 | `CORE_TYPE` | `2` | 0 = i1, 1 = im1, 2 = im2 |
 | `BRAM_ADDR_W` | `10` | Word address width of the code/data BRAM |
 | `CLK_FREQ` | `27_000_000` | Clock in Hz; sets UART baud and I2C SCL timing |
-| `HAS_GPIO`, `HAS_NN`, `HAS_SYSCTRL`, `HAS_UART`, `HAS_I2C` | `1` | Include that peripheral |
+| `MTIME_FREQ` | `1_000_000` | CLINT `mtime` rate in Hz; must divide `CLK_FREQ` |
+| `HAS_CLINT`, `HAS_GPIO`, `HAS_NN`, `HAS_SYSCTRL`, `HAS_UART`, `HAS_I2C` | `1` | Include that peripheral |
 
 A disabled peripheral keeps its address range: it reads as zero and ignores
 writes, like an unmapped address, so the memory map and software do not change
@@ -116,12 +117,15 @@ flowchart LR
     nn["NN accelerator<br/>16 KiB scratch"]
     sys["SYSCTRL<br/>LEDs"]
     gpio["GPIO0<br/>IRQ latch"]
+    clint["CLINT<br/>mtime / mtimecmp / msip"]
 
     core -- "instruction port" --> bram
     core -- "data port<br/>valid/ready" --> dec
     dec --> bram
     dec --> nn
     dec --> gpio
+    dec --> clint
+    clint -. "timer / software IRQ" .-> core
     dec --> bridge --> pdec
     pdec --> sys
     pdec --> uart
@@ -138,11 +142,14 @@ flowchart LR
 - NN accelerator (first version): an int8 dense-layer engine built on a
   4-lane dot-product unit, with 16 KiB of scratch memory, argmax and a cycle
   counter
+- CLINT with a 64-bit `mtime` / `mtimecmp` machine timer and `msip` software
+  interrupt in the standard SiFive/ACLINT layout (anv32im1 and anv32im2)
 - GPIO interrupt input with a pending/clear register (the rest of GPIO is
   planned)
 - Status LEDs
-- A valid/ready data bus in two tiers: BRAM, the accelerator and GPIO answer
-  with no wait states, and the slower peripherals sit behind a register slice.
+- A valid/ready data bus in two tiers: BRAM and GPIO answer with no wait
+  states, the accelerator and CLINT reads are registered at the core boundary,
+  and the slower peripherals sit behind a register slice.
   Peripheral registers have RP2040-style SET/CLR/XOR aliases for single-store
   bit updates.
 

@@ -24,6 +24,8 @@
 #define MSTATUS_MIE     0x00000008
 #define MSTATUS_MPIE    0x00000080
 #define MSTATUS_MPP_M   0x00001800
+#define MIE_MSIE        0x00000008
+#define MIE_MTIE        0x00000080
 #define MIE_MEIE        0x00000800
 #define MCAUSE_ILLEGAL  2
 #define MCAUSE_ECALL_M  11
