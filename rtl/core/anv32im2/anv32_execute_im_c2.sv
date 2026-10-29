@@ -139,8 +139,17 @@ module anv32_execute_im_c2
     // jump/branch to an address that is not 4-byte aligned (no C extension).
     logic mem_misaligned_exc, fetch_misaligned_exc;
 
-    assign mem_misaligned_exc   = dinstr_e2_i.is_mem && mem_misaligned(dinstr_e2_i.op, alu_result[1:0]);
-    assign fetch_misaligned_exc = dinstr_e2_i.is_pc_changer && branch_taken_o && pc_target[1];
+    // Both checks only need the low two bits of an address that the ALU forms
+    // as alu_a + alu_b (alu_op is ADD for loads, stores, branches and jumps;
+    // JALR's & ~1 leaves bit 1 alone). Those bits depend only on the operands'
+    // low two bits, so a dedicated 2-bit adder gives them without waiting on
+    // the full ALU and its output mux. trap_req fans out to the trap redirect
+    // and the CSR file, so this keeps the ALU off that path.
+    logic [1:0] addr_lsb;
+    assign addr_lsb = alu_a[1:0] + alu_b[1:0];
+
+    assign mem_misaligned_exc   = dinstr_e2_i.is_mem && mem_misaligned(dinstr_e2_i.op, addr_lsb);
+    assign fetch_misaligned_exc = dinstr_e2_i.is_pc_changer && branch_taken_o && addr_lsb[1];
 
     assign trap_req_o = dinstr_e2_i.valid &&
                         (dinstr_e2_i.exc_valid || mem_misaligned_exc || fetch_misaligned_exc);
