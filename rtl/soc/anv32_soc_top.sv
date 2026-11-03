@@ -20,7 +20,14 @@ module anv32_soc_top
     parameter bit HAS_NN      = 1'b0,
     parameter bit HAS_SYSCTRL = 1'b1,
     parameter bit HAS_UART    = 1'b1,
-    parameter bit HAS_I2C     = 1'b1
+    parameter bit HAS_I2C     = 1'b1,
+
+    // UART bootloader (sw/boot) in the top BOOT_SIZE bytes of the BRAM: the
+    // core resets into it, data writes cannot touch it, and the UART boot
+    // trigger resets the SoC into it. Needs HAS_UART and HAS_SYSCTRL.
+    parameter bit          HAS_BOOTLOADER = 1'b1,
+    parameter int unsigned BOOT_SIZE      = 1024,
+    parameter int unsigned BOOT_BAUD      = 115_200
 )(
     input  logic clk_i,
     input  logic rst_n_i,
@@ -58,8 +65,24 @@ module anv32_soc_top
         {I2C0_BASE, UART0_BASE, SYSCTRL_BASE};
     localparam logic [PERIPH_N-1:0][31:0] PERIPH_MASK = {PERIPH_N{~(MMIO_SLOT_SIZE - 1)}};
 
+    localparam int unsigned BRAM_BYTES = 4 << BRAM_ADDR_W;
+    localparam logic [31:0] BOOT_ADDR  = 32'(BRAM_BYTES - BOOT_SIZE);
+    localparam logic [31:0] RESET_PC   = HAS_BOOTLOADER ? BOOT_ADDR : 32'h0;
+
+    // synthesis translate_off
+    initial begin
+        if (HAS_BOOTLOADER && !(HAS_UART && HAS_SYSCTRL))
+            $fatal(1, "anv32_soc_top: HAS_BOOTLOADER needs HAS_UART and HAS_SYSCTRL");
+        if (HAS_BOOTLOADER && (BOOT_SIZE >= BRAM_BYTES || BOOT_SIZE % 4 != 0))
+            $fatal(1, "anv32_soc_top: BOOT_SIZE (%0d) does not fit the BRAM", BOOT_SIZE);
+    end
+    // synthesis translate_on
+
     logic rst_i;
     logic [POR_CYCLES-1:0] por_shift = '0;
+    logic boot_reset;       // UART boot trigger: reset the SoC into the bootloader
+    logic boot_req;         // SYSCTRL STATUS.BOOT_REQ
+    logic boot_req_clr;
 
     logic [31:0] instr_addr;
     logic [31:0] instr_rdata;
@@ -95,9 +118,29 @@ module anv32_soc_top
     logic        clint_sw_irq;      // MSIP
 
     always_ff @(posedge clk_i or negedge rst_n_i) begin
-        if (!rst_n_i) por_shift <= '0;
-        else          por_shift <= {por_shift[POR_CYCLES-2:0], 1'b1};
+        if (!rst_n_i)        por_shift <= '0;
+        else if (boot_reset) por_shift <= '0;
+        else                 por_shift <= {por_shift[POR_CYCLES-2:0], 1'b1};
     end
+
+    generate
+        if (HAS_BOOTLOADER) begin : g_boot
+            anv32_boot_trigger #(
+                .CLK_FREQ(CLK_FREQ),
+                .BAUD    (BOOT_BAUD)
+            ) boot_trigger (
+                .clk_i      (clk_i),
+                .rst_n_i    (rst_n_i),
+                .rx_i       (uart_rx_i),
+                .clear_i    (boot_req_clr),
+                .reset_req_o(boot_reset),
+                .boot_req_o (boot_req)
+            );
+        end else begin : g_no_boot
+            assign boot_reset = 1'b0;
+            assign boot_req   = 1'b0;
+        end
+    endgenerate
 
     assign rst_i        = ~por_shift[POR_CYCLES-1];
     assign debug_leds   = ~led_reg[3:0];
@@ -195,8 +238,14 @@ module anv32_soc_top
     // ---- Fast slaves ----------------------------------------------------------
     // BRAM: synchronous read, so read data already arrives one cycle later.
     // Only the low BRAM_ADDR_W bits decode; the rest of the region wraps.
+    // Writes into the bootloader at the top are dropped.
+    logic dmem_boot_hit;
+
     assign dmem_addr           = fast_req[FAST_BRAM].addr[BRAM_ADDR_W+1:2];
-    assign dmem_we             = fast_req[FAST_BRAM].valid ? fast_req[FAST_BRAM].we : 4'b0;
+    assign dmem_boot_hit       = HAS_BOOTLOADER &&
+                                 ({dmem_addr, 2'b00} >= BOOT_ADDR[BRAM_ADDR_W+1:0]);
+    assign dmem_we             = (fast_req[FAST_BRAM].valid && !dmem_boot_hit) ?
+                                 fast_req[FAST_BRAM].we : 4'b0;
     assign fast_rsp[FAST_BRAM] = '{ready: 1'b1, fast: 1'b1, rdata: dmem_rdata};
     assign imem_addr           = instr_addr[BRAM_ADDR_W+1:2];
 
@@ -298,11 +347,14 @@ module anv32_soc_top
                 .rst_i(rst_i),
                 .req_i(p_req[PERIPH_SYSCTRL]),
                 .rsp_o(p_rsp[PERIPH_SYSCTRL]),
-                .led_o(led_reg)
+                .led_o(led_reg),
+                .boot_req_i(boot_req),
+                .boot_req_clr_o(boot_req_clr)
             );
         end else begin : g_no_sysctrl
             assign p_rsp[PERIPH_SYSCTRL] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
             assign led_reg               = '0;   // LEDs stay off
+            assign boot_req_clr          = 1'b0;
         end
 
         if (HAS_UART) begin : g_uart
@@ -352,7 +404,7 @@ module anv32_soc_top
     // ---- Core -----------------------------------------------------------------
     generate
         if (CORE_TYPE == CORE_ANV32I1) begin : g_core_i1
-            anv32i1_top core (
+            anv32i1_top #(.PC_RESET_VALUE(RESET_PC)) core (
                 .clk_i(clk_i),
                 .rst_i(rst_i),
                 .stall_i(1'b0),
@@ -374,7 +426,7 @@ module anv32_soc_top
                 .mem_we(mem_we)
             );
         end else if (CORE_TYPE == CORE_ANV32IM1) begin : g_core_im1
-            anv32im1_top #(.HAS_M(1'b1)) core (
+            anv32im1_top #(.HAS_M(1'b1), .PC_RESET_VALUE(RESET_PC)) core (
                 .clk_i(clk_i),
                 .rst_i(rst_i),
                 .stall_i(1'b0),
@@ -396,7 +448,7 @@ module anv32_soc_top
                 .mem_we(mem_we)
             );
         end else begin : g_core_im2
-            anv32im2_top #(.HAS_M(1'b1)) core (
+            anv32im2_top #(.HAS_M(1'b1), .PC_RESET_VALUE(RESET_PC)) core (
                 .clk_i(clk_i),
                 .rst_i(rst_i),
                 .stall_i(1'b0),

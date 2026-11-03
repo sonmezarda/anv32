@@ -7,7 +7,7 @@ addresses assigned but no hardware behind them yet.
 
 | Address range | Size | Use |
 | --- | ---: | --- |
-| `0x0000_0000` - `0x0000_FFFF` | 64 KiB | On-chip BRAM (32 KiB populated by default, `BRAM_ADDR_W`) |
+| `0x0000_0000` - `0x0000_FFFF` | 64 KiB | On-chip BRAM (32 KiB populated by default, `BRAM_ADDR_W`); the UART bootloader takes the top 1 KiB (`0x7C00`) |
 | `0x0001_0000` - `0x0001_FFFF` | 64 KiB | Reserved boot ROM or extra local RAM |
 | `0x0200_0000` - `0x0200_FFFF` | 64 KiB | CLINT: machine timer and software interrupt |
 | `0x1000_0000` - `0x1000_FFFF` | 64 KiB | Low-speed MMIO peripherals |
@@ -23,7 +23,7 @@ Low-speed peripherals use 4 KiB slots under `0x1000_0000`.
 
 | Base | Slot | Peripheral |
 | --- | ---: | --- |
-| `0x1000_0000` | 4 KiB | SYSCTRL (LED register implemented; board/build ID reserved) |
+| `0x1000_0000` | 4 KiB | SYSCTRL (LED and STATUS.BOOT_REQ implemented; board/build ID reserved) |
 | `0x1000_1000` | 4 KiB | GPIO0 (only the IRQ pending register is implemented) |
 | `0x1000_2000` | 4 KiB | UART0 |
 | `0x1000_3000` | 4 KiB | I2C0 |
@@ -105,7 +105,7 @@ Some of those registers have no hardware behind them yet:
 
 | Peripheral | Implemented | Defined, not implemented yet |
 | --- | --- | --- |
-| SYSCTRL | `LED` | `STATUS`, `BOARD_ID`, `BUILD_ID` |
+| SYSCTRL | `LED`, `STATUS.BOOT_REQ` (bit 0, write 1 to clear) | `BOARD_ID`, `BUILD_ID` |
 | GPIO0 | `IRQ_PENDING` (one interrupt input, write 1 to clear) | `DATA`, `DIR`, `OUT_SET`, `OUT_CLR`, `IRQ_ENABLE` |
 | UART0 | `TXDATA`, `STATUS`, `BAUD`, `ERROR`, `RXDATA` | |
 | I2C0 | `CMD`, `STATUS`, `RXDATA`, `CTRL` | `SCL_LOW`, `SCL_HIGH`, `TIMEOUT` (timing is an RTL parameter for now) |

@@ -99,11 +99,14 @@ and every build option is one of its parameters:
 | `MTIME_FREQ` | `1_000_000` | CLINT `mtime` rate in Hz; must divide `CLK_FREQ` |
 | `HAS_CLINT`, `HAS_GPIO`, `HAS_SYSCTRL`, `HAS_UART`, `HAS_I2C` | `1` | Include that peripheral |
 | `HAS_NN` | `0` | Include the NN accelerator |
+| `HAS_BOOTLOADER` | `1` | UART bootloader in the top `BOOT_SIZE` (1 KiB) of the BRAM; needs UART and SYSCTRL |
+| `BOOT_BAUD` | `115_200` | Baud rate of the UART boot trigger |
 
 The defaults are the FreeRTOS build for the Tang Nano 9K. The GW1NR-9 has 26
 BSRAM blocks: 32 KiB of BRAM takes 16 and the register file 2, while the NN
 accelerator alone needs 16, so it only fits next to a smaller BRAM (the
 [MNIST demo](#mnist-demo) uses `HAS_NN = 1`, `BRAM_ADDR_W = 10`).
+With the bootloader in the top 1 KiB, programs get the 31 KiB below it.
 
 A disabled peripheral keeps its address range: it reads as zero and ignores
 writes, like an unmapped address, so the memory map and software do not change
@@ -141,7 +144,7 @@ flowchart LR
 ```
 
 - 32 KiB of on-chip BRAM for code and data, initialized from byte-lane hex
-  files at synthesis (there is no bootloader yet)
+  files at synthesis, with a UART bootloader in the top 1 KiB
 - UART with programmable baud rate and 16-entry TX/RX FIFOs
 - I2C master with a command queue, repeated START, clock stretching, timeout,
   arbitration-lost detection and bus recovery. Tested on hardware with a 16x2
@@ -194,7 +197,8 @@ an interrupt waking a task, and that preemption keeps every register intact.
 
 The accelerator is a first experiment and will be extended; this demo is its
 first end-to-end test. It needs the accelerator in the build: set
-`HAS_NN = 1` and `BRAM_ADDR_W = 10` in `anv32_soc_top`.
+`HAS_NN = 1` and `BRAM_ADDR_W = 10` in `anv32_soc_top`, and build the program
+with `BOOT_ADDR=0xC00` (the top 1 KiB of the 4 KiB BRAM).
 
 [`sw/fpga/nn_accel_uart_mnist.c`](sw/fpga/nn_accel_uart_mnist.c) receives a
 model and 28x28 images over UART, runs one 784 -> 10 dense layer on the
@@ -204,7 +208,7 @@ nearest-centroid classifier built from the MNIST training set by
 [`tools/generate_mnist_demo.py`](tools/generate_mnist_demo.py).
 
 ```sh
-make fpga FILE=sw/fpga/nn_accel_uart_mnist.c   # then build and program in Gowin
+make fpga FILE=sw/fpga/nn_accel_uart_mnist.c BOOT_ADDR=0xC00   # then build and program in Gowin
 pip install numpy pyserial
 python3 tools/uart_mnist_client.py --port /dev/ttyUSB0 --load-model --show-image
 ```
@@ -217,7 +221,7 @@ and pass `--index N` to pick a test image.
 Requirements:
 
 - `verilator` (5.x)
-- `python3`
+- `python3` (`pyserial` for `make load` and the MNIST client)
 - `riscv64-unknown-elf-gcc`, `objcopy`, `objdump`
 - `spike` (optional, for `make arch-test` and the commit-log diff tests)
 - Gowin IDE (for the FPGA build)
@@ -227,6 +231,7 @@ FreeRTOS is a submodule; fetch it once with `git submodule update --init`.
 ```sh
 make all          # stage-level unit tests
 make core-tests   # self-checking core, SoC and FreeRTOS tests on all three cores
+make boot-test    # UART bootloader end to end on all three cores
 make riscv-tests  # official riscv-tests (rv32ui, rv32um, rv32mi)
 make bench        # benchmarks on all three cores
 make check        # all of the above
@@ -244,10 +249,26 @@ their options.
 make fpga FILE=sw/fpga/uart_hello.c
 ```
 
-This builds the program and writes `fpga/gowin/anv32/src/prog*.hex`. The BRAM
-loads these files at synthesis, so every software change needs a new
-bitstream. Sources under `sw/freertos/` are built with the FreeRTOS kernel
-automatically. Open `fpga/gowin/anv32/anv32.gprj` in the Gowin
+This builds the program and writes `fpga/gowin/anv32/src/prog*.hex`, with the
+UART bootloader merged in at the top of the BRAM. The BRAM loads these files
+at synthesis. Sources under `sw/freertos/` are built with the FreeRTOS kernel
+automatically.
+
+Once a bitstream with the bootloader is on the board, new software goes over
+UART instead, without the reset button or a new bitstream:
+
+```sh
+make load FILE=sw/freertos/uart_demo.c LOAD_PORT=/dev/ttyUSB0
+python3 tools/uart_load.py --port COM5 build/fpga/c/uart_demo/uart_demo.bin --monitor   # Windows
+```
+
+`tools/uart_load.py` (needs `pyserial`) sends an 8-byte trigger that the SoC
+watches for in hardware; it resets the SoC into the bootloader, which takes
+the image with a CRC-32 check and runs it. A power-on or button reset runs the
+program in the BRAM straight away. The protocol is described in
+[`sw/boot/bootloader.S`](sw/boot/bootloader.S). The image only lives in the
+BRAM, so it is gone after a power cycle; `make fpga` puts a program in the
+bitstream. Open `fpga/gowin/anv32/anv32.gprj` in the Gowin
 IDE, then synthesize and program. The project references RTL directly from
 `rtl/`. Only the Gowin project is in the repo for now; the RTL itself is not
 vendor specific.
@@ -270,8 +291,8 @@ docs/            memory map, simulation, benchmarks, roadmap
 
 ## Status
 
-Working today: the three cores, UART, I2C, the CLINT, the first NN
-accelerator, the MNIST demo, and FreeRTOS on `anv32im1`/`anv32im2` (in
+Working today: the three cores, UART, I2C, the CLINT, the UART bootloader,
+the first NN accelerator, the MNIST demo, and FreeRTOS on `anv32im1`/`anv32im2` (in
 simulation and on the Tang Nano 9K). All three cores pass riscv-tests and riscv-arch-test for the
 extensions they implement (RV32I/RV32IM, Zicsr and the machine-mode
 privileged suite); the only skipped tests need optional features listed under
@@ -285,7 +306,6 @@ the limitations below. Planned next:
   [`docs/memory_map.md`](docs/memory_map.md#register-status).
 - Access faults on unmapped addresses
 - Vectored interrupts, an interrupt controller and general-purpose timers
-- A UART bootloader, so new software does not need a new bitstream
 
 Current limitations:
 

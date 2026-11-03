@@ -27,6 +27,9 @@ jobs:
       - name: Core, SoC and FreeRTOS tests
         run: make core-tests
 
+      - name: UART bootloader
+        run: make boot-test
+
       - name: Benchmarks
         run: make bench
 

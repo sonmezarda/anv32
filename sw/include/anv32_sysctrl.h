@@ -4,10 +4,13 @@
 #include "anv32_mmio.h"
 
 #define ANV32_SYSCTRL_LED_OFFSET        0x000u
-/* Not implemented yet */
 #define ANV32_SYSCTRL_STATUS_OFFSET     0x004u
+/* Not implemented yet */
 #define ANV32_SYSCTRL_BOARD_ID_OFFSET   0x008u
 #define ANV32_SYSCTRL_BUILD_ID_OFFSET   0x00Cu
+
+/* STATUS: the reset came from the UART boot trigger; write 1 to clear */
+#define ANV32_SYSCTRL_STATUS_BOOT_REQ   (1u << 0)
 
 #define ANV32_SYSCTRL_REG(base, offset) ANV32_REG32((base) + (offset))
 

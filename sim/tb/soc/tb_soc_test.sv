@@ -41,7 +41,8 @@ module tb_soc_test #(
         .HAS_NN(HAS_NN),
         .HAS_SYSCTRL(1'b1),
         .HAS_UART(1'b1),
-        .HAS_I2C(1'b1)
+        .HAS_I2C(1'b1),
+        .HAS_BOOTLOADER(1'b0)       // programs are loaded at 0 and run from reset
     ) dut (
         .clk_i(clk_i),
         .rst_n_i(rst_n_i),

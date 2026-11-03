@@ -33,7 +33,7 @@ make core-tests
 make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep,muldiv
 make core-tests TEST_SUITES=soc
 make core-tests TEST_SUITES=rtos
-make check        # unit tests + core/SoC tests + riscv-tests + benchmarks
+make check        # unit tests + core/SoC/FreeRTOS tests + bootloader + riscv-tests + benchmarks
 ```
 
 `tools/run_core_tests.py` builds each test program once and each testbench once
@@ -87,6 +87,19 @@ Runs on im1 and im2.
 To add a test, put the source next to the others and add an entry to the
 matching `tests.json` (`"requires": ["m"]` for programs that need the M
 extension).
+
+## Bootloader test
+
+```sh
+make boot-test
+```
+
+`tools/run_boot_test.py` runs `sim/tb/soc/tb_soc_boot.sv` on every core, on
+the default SoC with the bootloader merged into the BRAM image as `make fpga`
+does it. The testbench plays the host on the UART pins and checks that a
+power-on runs the program at 0 at once and that its stores to the bootloader
+were dropped, that the trigger resets into the bootloader (after near misses),
+that a bad CRC and a bad length are refused, and that a good image runs.
 
 ## RISC-V compliance tests
 

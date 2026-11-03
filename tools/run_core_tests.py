@@ -63,6 +63,7 @@ SOC_SOURCES = [
     "rtl/peripherals/nn_accelerator/mem_dot_product_stream.sv",
     "rtl/peripherals/nn_accelerator/dense_layer_engine.sv",
     "rtl/peripherals/nn_accelerator/nn_accel_periph.sv",
+    "rtl/soc/anv32_boot_trigger.sv",
     "rtl/soc/anv32_soc_top.sv",
 ]
 

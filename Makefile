@@ -37,6 +37,15 @@ FPGA_C_NAME ?= $(basename $(notdir $(FPGA_C_SRC)))
 FPGA_C_BUILD_DIR ?= build/fpga/c/$(FPGA_C_NAME)
 # FreeRTOS programs build with the kernel, the 32 KiB linker script and rv32im
 FPGA_C_RECIPE ?= $(if $(filter sw/freertos/%,$(FPGA_C_SRC)),sw/freertos/freertos.json)
+# The BRAM image carries the UART bootloader (sw/boot) at BOOT_ADDR, the top
+# 1 KiB of the BRAM (0x7C00 for 32 KiB, 0xC00 for 4 KiB; the bootloader is
+# position independent). FPGA_BOOT=0 for an SoC with HAS_BOOTLOADER = 0.
+# FPGA_INSTALL=0 only builds the program (used by make load).
+FPGA_BOOT  ?= 1
+FPGA_INSTALL ?= 1
+BOOT_ADDR  ?= 0x7C00
+BOOT_DIR   := build/boot
+LOAD_PORT  ?= /dev/ttyUSB0
 FPGA_ASM_SRC ?= $(if $(ASM),$(ASM),sw/fpga/led.S)
 FPGA_ASM_NAME ?= $(basename $(notdir $(FPGA_ASM_SRC)))
 FPGA_ASM_BUILD_DIR ?= build/fpga/asm/$(FPGA_ASM_NAME)
@@ -109,6 +118,23 @@ HEX_DIR   ?= sim/hex
 PROG      ?= prog
 HEX_SPLIT := tools/split_hex.py
 BIN_TO_HEX := tools/bin_to_hex.py
+
+# Shell snippet for fpga-c/fpga-asm: copy $$work_dir/$$name's image into the
+# Gowin project, with the bootloader merged in unless FPGA_BOOT=0.
+FPGA_INSTALL_IMAGE = \
+	if [ "$(FPGA_INSTALL)" != 1 ]; then \
+		echo "Built $$work_dir/$$name.bin"; \
+	else \
+		if [ "$(FPGA_BOOT)" = 1 ]; then \
+			$(PYTHON) tools/merge_boot_image.py "$$work_dir/$$name.hex" \
+				"$(BOOT_DIR)/bootloader.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex" \
+				--boot-addr $(BOOT_ADDR); \
+		else \
+			cp "$$work_dir/$$name.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex"; \
+		fi; \
+		$(PYTHON) $(HEX_SPLIT) "$(FPGA_DIR)/$(FPGA_PROG).hex" "$(FPGA_DIR)/$(FPGA_PROG)" >/dev/null; \
+		echo "Wrote $(FPGA_DIR)/$(FPGA_PROG).hex and $(FPGA_DIR)/$(FPGA_PROG)_lane[0-3].hex"; \
+	fi
 BUILD_RV32 := tools/build_rv32_program.py
 BUILD_RV32_ASM := tools/build_rv32_asm_program.py
 RUN_SPIKE_LOG := tools/run_spike_log.py
@@ -291,7 +317,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch cpu-run mem-ready-trace core-tests soc-configs riscv-tests arch-test check bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch boot load boot-test cpu-run mem-ready-trace core-tests soc-configs riscv-tests arch-test check bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -381,7 +407,37 @@ fpga:
 		esac; \
 	fi
 
-fpga-c:
+# The bootloader, linked at BOOT_ADDR (sw/boot/link.ld)
+boot:
+	@$(PYTHON) $(BUILD_RV32_ASM) \
+		--src sw/boot/bootloader.S \
+		--out-dir "$(BOOT_DIR)" \
+		--name bootloader \
+		--cc "$(SW_CC)" \
+		--march rv32i \
+		--mabi "$(SW_ABI)" \
+		--objcopy "$(SW_OBJCOPY)" \
+		--objdump "$(SW_OBJDUMP)" \
+		--linker sw/boot/link.ld \
+		--bin-to-hex "$(BIN_TO_HEX)" \
+		--split-hex "$(HEX_SPLIT)" \
+		--python "$(PYTHON)" >/dev/null
+
+# Build FILE and send it to a running board through the bootloader, without a
+# new bitstream. The bootloader must already be in the bitstream.
+load:
+	@set -euo pipefail; \
+	file="$(FPGA_FILE)"; \
+	name="$$(basename "$${file%.*}")"; \
+	case "$$file" in \
+		*.c) dir=build/fpga/c/$$name ;; \
+		*.S|*.s) dir=build/fpga/asm/$$name ;; \
+		*) echo "Usage: make load FILE=<prog.c|prog.S> [LOAD_PORT=/dev/ttyUSB0]"; exit 2 ;; \
+	esac; \
+	$(MAKE) --no-print-directory fpga FILE="$$file" FPGA_INSTALL=0; \
+	$(PYTHON) tools/uart_load.py --port "$(LOAD_PORT)" --max-size $(BOOT_ADDR) "$$dir/$$name.bin"
+
+fpga-c: $(if $(filter 1,$(FPGA_BOOT)),boot)
 	@set -euo pipefail; \
 	src="$(FPGA_C_SRC)"; \
 	name="$(FPGA_C_NAME)"; \
@@ -403,14 +459,10 @@ fpga-c:
 		--python "$(PYTHON)" \
 		$(if $(FPGA_C_RECIPE),--recipe "$(FPGA_C_RECIPE)") \
 		"--opt=$(SW_OPT)"; \
-	cp "$$work_dir/$$name.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex"; \
-	for n in 0 1 2 3; do \
-		cp "$$work_dir/$${name}_lane$${n}.hex" "$(FPGA_DIR)/$(FPGA_PROG)_lane$${n}.hex"; \
-	done; \
-	echo "Wrote $(FPGA_DIR)/$(FPGA_PROG).hex and $(FPGA_DIR)/$(FPGA_PROG)_lane[0-3].hex"; \
+	$(FPGA_INSTALL_IMAGE); \
 	echo "Disassembly: $$work_dir/$$name.dump"
 
-fpga-asm:
+fpga-asm: $(if $(filter 1,$(FPGA_BOOT)),boot)
 	@set -euo pipefail; \
 	src="$(FPGA_ASM_SRC)"; \
 	name="$(FPGA_ASM_NAME)"; \
@@ -430,11 +482,7 @@ fpga-asm:
 		--bin-to-hex "$(BIN_TO_HEX)" \
 		--split-hex "$(HEX_SPLIT)" \
 		--python "$(PYTHON)"; \
-	cp "$$work_dir/$$name.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex"; \
-	for n in 0 1 2 3; do \
-		cp "$$work_dir/$${name}_lane$${n}.hex" "$(FPGA_DIR)/$(FPGA_PROG)_lane$${n}.hex"; \
-	done; \
-	echo "Wrote $(FPGA_DIR)/$(FPGA_PROG).hex and $(FPGA_DIR)/$(FPGA_PROG)_lane[0-3].hex"; \
+	$(FPGA_INSTALL_IMAGE); \
 	echo "Disassembly: $$work_dir/$$name.dump"
 
 cpu-run:
@@ -557,21 +605,26 @@ core-tests:
 		--tests "$(TEST_NAMES)" \
 		--out-dir "$(TEST_OUT_DIR)"
 
+# The UART bootloader on the SoC, every core (sim/tb/soc/tb_soc_boot.sv)
+boot-test:
+	$(PYTHON) tools/run_boot_test.py --cores "$(TEST_CORES)"
+
 # Elaborate anv32_soc_top in every core and with each peripheral toggled, so a
 # configuration nobody simulates still builds. Lint only; behaviour is covered
 # by core-tests (soc: every peripheral on, 4 KiB; rtos: the default build).
 SOC_CONFIGS := \
 	CORE_TYPE=0 CORE_TYPE=1 CORE_TYPE=2 \
-	HAS_CLINT=0 HAS_GPIO=0 HAS_NN=1 HAS_SYSCTRL=0 HAS_UART=0 HAS_I2C=0 \
+	HAS_CLINT=0 HAS_GPIO=0 HAS_NN=1 HAS_I2C=0 HAS_BOOTLOADER=0 \
+	HAS_SYSCTRL=0,HAS_BOOTLOADER=0 HAS_UART=0,HAS_BOOTLOADER=0 \
 	HAS_NN=1,BRAM_ADDR_W=10 \
-	HAS_CLINT=0,HAS_GPIO=0,HAS_NN=0,HAS_SYSCTRL=0,HAS_UART=0,HAS_I2C=0 \
+	HAS_CLINT=0,HAS_GPIO=0,HAS_NN=0,HAS_SYSCTRL=0,HAS_UART=0,HAS_I2C=0,HAS_BOOTLOADER=0 \
 	MTIME_FREQ=27000000
 
 soc-configs:
 	@srcs="$$($(PYTHON) -c "import sys; sys.path.insert(0, 'tools'); import run_core_tests as r; print(' '.join(r.soc_sources()))")"; \
 	for cfg in $(SOC_CONFIGS); do \
 		gflags=$$(printf -- '-G%s ' $$(echo $$cfg | tr ',' ' ')); \
-		printf '  %-68s' "$$cfg"; \
+		printf '  %-88s' "$$cfg"; \
 		$(VERILATOR) --lint-only -sv -Wall -Wno-fatal $(VERILATOR_WARNINGS) \
 			--top-module anv32_soc_top $$gflags $$srcs >/dev/null 2>&1 \
 			|| { echo FAIL; exit 1; }; \
@@ -589,7 +642,7 @@ arch-test:
 
 # Everything that runs without Spike or hardware: unit tests, SoC configuration
 # lint, core/SoC tests, riscv-tests and the benchmark self-checks.
-check: all soc-configs core-tests riscv-tests bench
+check: all soc-configs core-tests boot-test riscv-tests bench
 
 bench:
 	@args=( \
@@ -733,6 +786,9 @@ help:
 	@echo "                       Build assembly for Gowin BRAM image"
 	@echo "  make fpga-c C=file.c / make fpga-asm ASM=file.S"
 	@echo "                       Explicit FPGA C/assembly build targets"
+	@echo "  make load FILE=file.c LOAD_PORT=/dev/ttyUSB0"
+	@echo "                       Build and send a program through the UART bootloader"
+	@echo "  make boot           Build the UART bootloader (merged into every FPGA image)"
 	@echo "  make asm-golden-run ASM=file.S"
 	@echo "                       Build at 0x80000000, run Spike golden and CPU trace"
 	@echo "  make asm-diff-test ASM=file.S"
@@ -741,6 +797,7 @@ help:
 	@echo "  make core-tests     Run the self-checking core and SoC tests (sw/tests)"
 	@echo "  make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep"
 	@echo "                       Select cores and tests (TEST_SUITES=core,soc,rtos)"
+	@echo "  make boot-test      Run the UART bootloader test on all cores"
 	@echo "  make soc-configs    Lint anv32_soc_top in every core / peripheral configuration"
 	@echo "  make riscv-tests    Run riscv-tests (rv32ui/um/mi) on all cores"
 	@echo "  make arch-test      Run riscv-arch-test, compared against Spike"
