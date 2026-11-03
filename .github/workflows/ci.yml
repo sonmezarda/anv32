@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install tools
         run: |
@@ -22,7 +24,7 @@ jobs:
       - name: SoC configurations
         run: make soc-configs
 
-      - name: Core and SoC tests
+      - name: Core, SoC and FreeRTOS tests
         run: make core-tests
 
       - name: Benchmarks

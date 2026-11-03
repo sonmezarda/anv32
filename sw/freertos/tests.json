@@ -1,0 +1,4 @@
+[
+  { "name": "freertos_demo", "src": "sw/freertos/rtos_demo.c", "recipe": "sw/freertos/freertos.json",
+    "max_cycles": 3000000, "requires": ["mtimer"] }
+]

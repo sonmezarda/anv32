@@ -35,6 +35,8 @@ FPGA_FILE  ?= $(FILE)
 FPGA_C_SRC ?= $(if $(C),$(C),sw/fpga/led.c)
 FPGA_C_NAME ?= $(basename $(notdir $(FPGA_C_SRC)))
 FPGA_C_BUILD_DIR ?= build/fpga/c/$(FPGA_C_NAME)
+# FreeRTOS programs build with the kernel, the 32 KiB linker script and rv32im
+FPGA_C_RECIPE ?= $(if $(filter sw/freertos/%,$(FPGA_C_SRC)),sw/freertos/freertos.json)
 FPGA_ASM_SRC ?= $(if $(ASM),$(ASM),sw/fpga/led.S)
 FPGA_ASM_NAME ?= $(basename $(notdir $(FPGA_ASM_SRC)))
 FPGA_ASM_BUILD_DIR ?= build/fpga/asm/$(FPGA_ASM_NAME)
@@ -69,7 +71,7 @@ BENCH_FMAX_JSON ?=
 BENCH_FMAX ?=
 BENCH_OPT ?= -Os
 TEST_CORES ?= anv32i1,anv32im1,anv32im2
-TEST_SUITES ?= core,soc
+TEST_SUITES ?= core,soc,rtos
 TEST_NAMES ?= all
 TEST_OUT_DIR ?= build/core_tests
 ASM_HARD_CYCLES ?= 180
@@ -399,6 +401,7 @@ fpga-c:
 		--bin-to-hex "$(BIN_TO_HEX)" \
 		--split-hex "$(HEX_SPLIT)" \
 		--python "$(PYTHON)" \
+		$(if $(FPGA_C_RECIPE),--recipe "$(FPGA_C_RECIPE)") \
 		"--opt=$(SW_OPT)"; \
 	cp "$$work_dir/$$name.hex" "$(FPGA_DIR)/$(FPGA_PROG).hex"; \
 	for n in 0 1 2 3; do \
@@ -736,7 +739,7 @@ help:
 	@echo "  make asm-hard-test  Run the RV32I hard assembly diff suite"
 	@echo "  make core-tests     Run the self-checking core and SoC tests (sw/tests)"
 	@echo "  make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep"
-	@echo "                       Select cores and tests (TEST_SUITES=core,soc)"
+	@echo "                       Select cores and tests (TEST_SUITES=core,soc,rtos)"
 	@echo "  make soc-configs    Lint anv32_soc_top in every core / peripheral configuration"
 	@echo "  make riscv-tests    Run riscv-tests (rv32ui/um/mi) on all cores"
 	@echo "  make arch-test      Run riscv-arch-test, compared against Spike"

@@ -26,12 +26,13 @@ make list         # list registered tests
 `make WARN=1 <test>` shows Verilator lint warnings, and `EXTRA_VFLAGS="..."`
 passes extra flags to Verilator.
 
-## Core and SoC tests
+## Core, SoC and FreeRTOS tests
 
 ```sh
 make core-tests
 make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep,muldiv
 make core-tests TEST_SUITES=soc
+make core-tests TEST_SUITES=rtos
 make check        # unit tests + core/SoC tests + riscv-tests + benchmarks
 ```
 
@@ -69,7 +70,19 @@ back through the LED register; the UART TX pin is looped back to RX.
 | `soc_unmapped`      | unmapped addresses ignore writes, read zero, leave RAM alone |
 | `soc_uart_loopback` | UART TX/RX through the FIFOs |
 | `soc_gpio_irq`      | GPIO interrupt pending/clear and the external interrupt path |
+| `soc_clint`         | `mtime` rate, timer and software interrupts through a C handler (im1/im2) |
 | `soc_nn_smoke`      | one small dense layer on the NN accelerator |
+
+**FreeRTOS suite** ([`sw/freertos/tests.json`](../sw/freertos/tests.json)):
+FreeRTOS programs on the same testbench, built with 32 KiB of BRAM
+(`BRAM_ADDR_W=13`) and no NN accelerator, as in the default FPGA build. The kernel is the `third_party/FreeRTOS-Kernel` submodule
+(`git submodule update --init`), using the official RISC-V port unchanged with
+the CLINT tick; the board files are in [`sw/freertos`](../sw/freertos).
+Runs on im1 and im2.
+
+| Test            | Covers |
+| --------------- | ------ |
+| `freertos_demo` | tick timing against `mtime`, a queue with both sides blocking, an `msip` interrupt waking a task through a semaphore, and two register test tasks time-sliced by the tick that check every register survives a context switch |
 
 To add a test, put the source next to the others and add an entry to the
 matching `tests.json` (`"requires": ["m"]` for programs that need the M

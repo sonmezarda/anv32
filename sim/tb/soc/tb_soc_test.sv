@@ -9,7 +9,9 @@
 //   +prog=<base>        image base name, loads <base>_lane[0-3].hex
 //   +max_cycles=<n>     timeout (default 200000)
 module tb_soc_test #(
-    parameter int unsigned CORE_TYPE = 2
+    parameter int unsigned CORE_TYPE   = 2,
+    parameter int unsigned BRAM_ADDR_W = 10,
+    parameter bit          HAS_NN      = 1'b1
 );
     localparam logic [31:0] LED_PASS       = 32'h2;
     localparam logic [31:0] LED_GPIO_PULSE = 32'h5;
@@ -29,14 +31,14 @@ module tb_soc_test #(
     // defaults anv32_soc_top currently carries for an FPGA build.
     anv32_soc_top #(
         .CORE_TYPE(CORE_TYPE),
-        .BRAM_ADDR_W(10),
+        .BRAM_ADDR_W(BRAM_ADDR_W),
         .POR_CYCLES(4),
         .INIT_FILE(""),
         .CLK_FREQ(27_000_000),
         .MTIME_FREQ(1_000_000),     // one mtime tick every 27 clocks
         .HAS_CLINT(1'b1),
         .HAS_GPIO(1'b1),
-        .HAS_NN(1'b1),
+        .HAS_NN(HAS_NN),
         .HAS_SYSCTRL(1'b1),
         .HAS_UART(1'b1),
         .HAS_I2C(1'b1)

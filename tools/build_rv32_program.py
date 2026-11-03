@@ -2,6 +2,7 @@
 """Build a tiny freestanding RV32 C program and emit sim memory images."""
 
 import argparse
+import json
 import subprocess
 from pathlib import Path
 
@@ -34,7 +35,19 @@ def main():
     parser.add_argument("--python", default="python3")
     parser.add_argument("--opt", default="-Os")
     parser.add_argument("--lib-dir", default="sw/fpga/lib")
+    parser.add_argument("--recipe",
+                        help="JSON build recipe (e.g. sw/freertos/freertos.json): "
+                             "march, linker, crt0, include, extra_src, cflags; "
+                             "its values override the options above")
     args = parser.parse_args()
+
+    recipe = {}
+    if args.recipe:
+        with open(args.recipe) as f:
+            recipe = json.load(f)
+        args.march = recipe.get("march", args.march)
+        args.linker = recipe.get("linker", args.linker)
+        args.crt0 = recipe.get("crt0", args.crt0)
 
     src = Path(args.src)
     out_dir = Path(args.out_dir)
@@ -66,6 +79,8 @@ def main():
         "sw/include",
         "-I",
         "sw/fpga",
+        *[flag for inc in recipe.get("include", []) for flag in ("-I", inc)],
+        *recipe.get("cflags", []),
     ]
 
     lib_sources = []
@@ -73,6 +88,7 @@ def main():
         lib_sources = sorted(
             path for path in lib_dir.glob("*.c") if path.resolve() != src.resolve()
         )
+    lib_sources += [Path(path) for path in recipe.get("extra_src", [])]
     lib_objects = [out_dir / object_name_for(path) for path in lib_sources]
 
     run([args.cc, *common_flags, "-S", str(src), "-o", str(c_asm)])

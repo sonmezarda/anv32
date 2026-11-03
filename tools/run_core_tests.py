@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Build and run the self-checking tests in sw/tests on every core.
 
-Two suites:
+Three suites:
   core  assembly tests on the bare core (sim/tb/common/tb_core_test.sv)
   soc   C tests on the full SoC (sim/tb/soc/tb_soc_test.sv)
+  rtos  FreeRTOS programs on the SoC with 32 KiB of BRAM and no NN accelerator
+        (the default FPGA build); kernel in third_party/FreeRTOS-Kernel
 """
 
 from __future__ import annotations
@@ -19,6 +21,12 @@ from run_benchmarks import CORE_DEFINES, CORE_FEATURES, CORE_SOURCES, QUIET_WARN
 
 
 CORE_TYPES = {"anv32i1": 0, "anv32im1": 1, "anv32im2": 2}
+
+# tb_soc_test parameters per SoC suite
+SOC_SUITE_PARAMS = {
+    "soc": [],
+    "rtos": ["-GBRAM_ADDR_W=13", "-GHAS_NN=0"],
+}
 
 # tb_core_test puts the real CLINT next to the bare core
 CORE_TB_SOURCES = [
@@ -91,6 +99,7 @@ def build_program(args: argparse.Namespace, repo: Path, test: dict, out_dir: Pat
             "--split-hex", "tools/split_hex.py",
             "--python", args.python,
             *(["--crt0", "sw/common/crt0.S", "--opt=-Os"] if is_c else []),
+            *([f"--recipe={test['recipe']}"] if "recipe" in test else []),
         ],
         cwd=repo,
         verbose=args.verbose,
@@ -109,9 +118,10 @@ def build_tb(args: argparse.Namespace, repo: Path, suite: str, core: str, out_di
              reset_pc: int = 0) -> Path:
     mdir = out_dir / "obj" / f"{suite}_{core}"
     mdir.mkdir(parents=True, exist_ok=True)
-    if suite == "soc":
+    if suite in SOC_SUITE_PARAMS:
         top = "tb_soc_test"
-        design = [f"-GCORE_TYPE={CORE_TYPES[core]}", *soc_sources(), "sim/tb/soc/tb_soc_test.sv"]
+        design = [f"-GCORE_TYPE={CORE_TYPES[core]}", *SOC_SUITE_PARAMS[suite],
+                  *soc_sources(), "sim/tb/soc/tb_soc_test.sv"]
     else:
         top = "tb_core_test"
         design = [f"-D{CORE_DEFINES[core]}", f"-GRESET_PC=32'h{reset_pc:08x}",
@@ -156,10 +166,11 @@ def run_test(args: argparse.Namespace, repo: Path, sim: Path, prog: Path, test: 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cores", default="anv32i1,anv32im1,anv32im2")
-    parser.add_argument("--suites", default="core,soc")
+    parser.add_argument("--suites", default="core,soc,rtos")
     parser.add_argument("--tests", default="all")
     parser.add_argument("--core-test-list", default="sw/tests/tests.json")
     parser.add_argument("--soc-test-list", default="sw/tests/soc/tests.json")
+    parser.add_argument("--rtos-test-list", default="sw/freertos/tests.json")
     parser.add_argument("--out-dir", default="build/core_tests")
     parser.add_argument("--no-mem-wait", action="store_true",
                         help="skip the extra wait-state run on cores with mem_ready")
@@ -182,7 +193,8 @@ def main() -> int:
         raise SystemExit(f"unknown core(s): {', '.join(unknown)}")
 
     suites = parse_csv(args.suites)
-    lists = {"core": Path(args.core_test_list), "soc": Path(args.soc_test_list)}
+    lists = {"core": Path(args.core_test_list), "soc": Path(args.soc_test_list),
+             "rtos": Path(args.rtos_test_list)}
     unknown = sorted(set(suites) - set(lists))
     if unknown:
         raise SystemExit(f"unknown suite(s): {', '.join(unknown)}")
