@@ -8,7 +8,7 @@ module anv32_soc_top
     import anv32_soc_addr_pkg::*;
 #(
     parameter int unsigned CORE_TYPE   = 2,           // 0 = i1, 1 = im1, 2 = im2
-    parameter int unsigned BRAM_ADDR_W = 10,
+    parameter int unsigned BRAM_ADDR_W = 13,
     parameter int unsigned POR_CYCLES  = 8,
     parameter              INIT_FILE   = "src/prog",
     parameter int unsigned CLK_FREQ    = 27_000_000,  // Hz, for UART/I2C timing
@@ -17,7 +17,7 @@ module anv32_soc_top
     // Peripherals
     parameter bit HAS_CLINT   = 1'b1,
     parameter bit HAS_GPIO    = 1'b1,
-    parameter bit HAS_NN      = 1'b1,
+    parameter bit HAS_NN      = 1'b0,
     parameter bit HAS_SYSCTRL = 1'b1,
     parameter bit HAS_UART    = 1'b1,
     parameter bit HAS_I2C     = 1'b1

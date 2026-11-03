@@ -13,8 +13,8 @@ difference. The second goal is to end up with cores that are actually usable
 at MCU level. It follows my earlier 8-bit fully custom CPU, ArniComp.
 
 Today there are three in-order cores that share most of their pipeline, an SoC
-with UART, I2C and a first int8 neural-network accelerator, and a
-Verilator-based test and benchmark flow. Most development happens on a Tang
+with UART, I2C, a CLINT timer and a first int8 neural-network accelerator that
+runs FreeRTOS, and a Verilator-based test and benchmark flow. Most development happens on a Tang
 Nano 9K (Gowin GW1NR-9); the design has also been run on a PYNQ-Z2.
 
 This is a work in progress. A superscalar core, a Linux-capable core, GPIO,
@@ -94,10 +94,16 @@ and every build option is one of its parameters:
 | Parameter | Default | Meaning |
 |---|---|---|
 | `CORE_TYPE` | `2` | 0 = i1, 1 = im1, 2 = im2 |
-| `BRAM_ADDR_W` | `10` | Word address width of the code/data BRAM |
+| `BRAM_ADDR_W` | `13` | Word address width of the code/data BRAM (13 = 32 KiB) |
 | `CLK_FREQ` | `27_000_000` | Clock in Hz; sets UART baud and I2C SCL timing |
 | `MTIME_FREQ` | `1_000_000` | CLINT `mtime` rate in Hz; must divide `CLK_FREQ` |
-| `HAS_CLINT`, `HAS_GPIO`, `HAS_NN`, `HAS_SYSCTRL`, `HAS_UART`, `HAS_I2C` | `1` | Include that peripheral |
+| `HAS_CLINT`, `HAS_GPIO`, `HAS_SYSCTRL`, `HAS_UART`, `HAS_I2C` | `1` | Include that peripheral |
+| `HAS_NN` | `0` | Include the NN accelerator |
+
+The defaults are the FreeRTOS build for the Tang Nano 9K. The GW1NR-9 has 26
+BSRAM blocks: 32 KiB of BRAM takes 16 and the register file 2, while the NN
+accelerator alone needs 16, so it only fits next to a smaller BRAM (the
+[MNIST demo](#mnist-demo) uses `HAS_NN = 1`, `BRAM_ADDR_W = 10`).
 
 A disabled peripheral keeps its address range: it reads as zero and ignores
 writes, like an unmapped address, so the memory map and software do not change
@@ -108,7 +114,7 @@ elaborates.
 ```mermaid
 flowchart LR
     core["Core<br/>anv32i1 / im1 / im2"]
-    bram["Dual-port BRAM<br/>4 KiB code + data"]
+    bram["Dual-port BRAM<br/>32 KiB code + data"]
     dec["Fast decoder<br/>0 wait"]
     bridge["Bridge<br/>register slice"]
     pdec["Peripheral decoder<br/>1 wait"]
@@ -134,14 +140,15 @@ flowchart LR
     nn -. "IRQ" .-> core
 ```
 
-- 4 KiB of on-chip BRAM for code and data, initialized from byte-lane hex files
+- 32 KiB of on-chip BRAM for code and data, initialized from byte-lane hex
+  files at synthesis (there is no bootloader yet)
 - UART with programmable baud rate and 16-entry TX/RX FIFOs
 - I2C master with a command queue, repeated START, clock stretching, timeout,
   arbitration-lost detection and bus recovery. Tested on hardware with a 16x2
   LCD backpack and a QMC5883L magnetometer.
 - NN accelerator (first version): an int8 dense-layer engine built on a
   4-lane dot-product unit, with 16 KiB of scratch memory, argmax and a cycle
-  counter
+  counter (optional, off by default)
 - CLINT with a 64-bit `mtime` / `mtimecmp` machine timer and `msip` software
   interrupt in the standard SiFive/ACLINT layout (anv32im1 and anv32im2)
 - GPIO interrupt input with a pending/clear register (the rest of GPIO is
@@ -158,10 +165,36 @@ The address map and the bus are described in
 are in [`sw/include`](sw/include), and the matching SystemVerilog packages are
 in [`rtl/include`](rtl/include).
 
+### FreeRTOS
+
+FreeRTOS runs on `anv32im1` and `anv32im2` with the official RISC-V port,
+unchanged: the tick comes from the CLINT and task switches use `ecall`. The
+kernel is the `third_party/FreeRTOS-Kernel` submodule; the board files
+(config, linker script, startup) are in [`sw/freertos`](sw/freertos).
+
+[`sw/freertos/uart_demo.c`](sw/freertos/uart_demo.c) blinks LED0, prints the
+uptime over UART once a second, and counts presses of button S1 through the
+GPIO interrupt, which wakes a task from the interrupt handler.
+
+```sh
+make fpga FILE=sw/freertos/uart_demo.c   # default SoC parameters, then build and program in Gowin
+```
+
+```text
+anv32 FreeRTOS V11.3.2
+uptime 1 s, ticks 1000
+uptime 2 s, ticks 2000
+button 1
+```
+
+In simulation, `make core-tests TEST_SUITES=rtos` checks the tick, queues,
+an interrupt waking a task, and that preemption keeps every register intact.
+
 ### MNIST demo
 
 The accelerator is a first experiment and will be extended; this demo is its
-first end-to-end test.
+first end-to-end test. It needs the accelerator in the build: set
+`HAS_NN = 1` and `BRAM_ADDR_W = 10` in `anv32_soc_top`.
 
 [`sw/fpga/nn_accel_uart_mnist.c`](sw/fpga/nn_accel_uart_mnist.c) receives a
 model and 28x28 images over UART, runs one 784 -> 10 dense layer on the
@@ -189,9 +222,11 @@ Requirements:
 - `spike` (optional, for `make arch-test` and the commit-log diff tests)
 - Gowin IDE (for the FPGA build)
 
+FreeRTOS is a submodule; fetch it once with `git submodule update --init`.
+
 ```sh
 make all          # stage-level unit tests
-make core-tests   # self-checking core and SoC tests on all three cores
+make core-tests   # self-checking core, SoC and FreeRTOS tests on all three cores
 make riscv-tests  # official riscv-tests (rv32ui, rv32um, rv32mi)
 make bench        # benchmarks on all three cores
 make check        # all of the above
@@ -210,7 +245,9 @@ make fpga FILE=sw/fpga/uart_hello.c
 ```
 
 This builds the program and writes `fpga/gowin/anv32/src/prog*.hex`. The BRAM
-loads these files at synthesis. Open `fpga/gowin/anv32/anv32.gprj` in the Gowin
+loads these files at synthesis, so every software change needs a new
+bitstream. Sources under `sw/freertos/` are built with the FreeRTOS kernel
+automatically. Open `fpga/gowin/anv32/anv32.gprj` in the Gowin
 IDE, then synthesize and program. The project references RTL directly from
 `rtl/`. Only the Gowin project is in the repo for now; the RTL itself is not
 vendor specific.
@@ -219,21 +256,23 @@ vendor specific.
 
 ```text
 rtl/core/        cores: common blocks, shared pipeline stages, per-core execute/top
-rtl/peripherals/ uart, i2c, gpio, sysctrl, nn_accelerator
-rtl/soc/         SoC top, per-core wrappers, bus decoder/bridge/register front end
+rtl/peripherals/ clint, uart, i2c, gpio, sysctrl, nn_accelerator
+rtl/soc/         SoC top, bus decoder/bridge/read pipe/register front end
 rtl/include/     ISA, config and register-map packages
 sim/tb/          Verilator testbenches
-sw/              crt0, linker scripts, examples, FPGA programs, benchmarks, tests,
-                 compliance-test model files
+sw/              crt0, linker scripts, examples, FPGA programs, FreeRTOS port
+                 files and demos, benchmarks, tests, compliance-test model files
 tools/           build, hex conversion, Spike diff, benchmark and MNIST scripts
+third_party/     FreeRTOS kernel (submodule)
 fpga/gowin/      Gowin project
 docs/            memory map, simulation, benchmarks, roadmap
 ```
 
 ## Status
 
-Working today: the three cores, UART, I2C, the first NN accelerator and the
-MNIST demo. All three cores pass riscv-tests and riscv-arch-test for the
+Working today: the three cores, UART, I2C, the CLINT, the first NN
+accelerator, the MNIST demo, and FreeRTOS on `anv32im1`/`anv32im2` (in
+simulation and on the Tang Nano 9K). All three cores pass riscv-tests and riscv-arch-test for the
 extensions they implement (RV32I/RV32IM, Zicsr and the machine-mode
 privileged suite); the only skipped tests need optional features listed under
 the limitations below. Planned next:
@@ -245,7 +284,8 @@ the limitations below. Planned next:
   are already defined, but most are not implemented yet; see
   [`docs/memory_map.md`](docs/memory_map.md#register-status).
 - Access faults on unmapped addresses
-- Timer interrupt and vectored interrupts
+- Vectored interrupts, an interrupt controller and general-purpose timers
+- A UART bootloader, so new software does not need a new bitstream
 
 Current limitations:
 

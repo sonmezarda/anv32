@@ -9,7 +9,7 @@
  */
 
 #define ANV32_BRAM_BASE             0x00000000u
-#define ANV32_BRAM_SIZE             0x00010000u  /* region size; 4 KiB populated today */
+#define ANV32_BRAM_SIZE             0x00010000u  /* region size; 32 KiB populated by default */
 
 /* Reserved, no hardware yet */
 #define ANV32_BOOTROM_BASE          0x00010000u

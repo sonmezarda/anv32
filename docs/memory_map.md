@@ -7,7 +7,7 @@ addresses assigned but no hardware behind them yet.
 
 | Address range | Size | Use |
 | --- | ---: | --- |
-| `0x0000_0000` - `0x0000_FFFF` | 64 KiB | On-chip BRAM (4 KiB populated in the current build) |
+| `0x0000_0000` - `0x0000_FFFF` | 64 KiB | On-chip BRAM (32 KiB populated by default, `BRAM_ADDR_W`) |
 | `0x0001_0000` - `0x0001_FFFF` | 64 KiB | Reserved boot ROM or extra local RAM |
 | `0x0200_0000` - `0x0200_FFFF` | 64 KiB | CLINT: machine timer and software interrupt |
 | `0x1000_0000` - `0x1000_FFFF` | 64 KiB | Low-speed MMIO peripherals |
@@ -114,8 +114,8 @@ Some of those registers have no hardware behind them yet:
 Data accesses to an address with no hardware behind it ignore writes and read
 as zero. This covers unimplemented registers, reserved slots and reserved
 regions. Raising an access fault instead is on the [roadmap](roadmap.md).
-The exception is the BRAM region: addresses above the populated 4 KiB wrap
-around onto it.
+The exception is the BRAM region: addresses above the populated BRAM (32 KiB
+by default) wrap around onto it.
 
 ## Accelerator Apertures
 

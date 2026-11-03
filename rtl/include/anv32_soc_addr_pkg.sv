@@ -1,7 +1,7 @@
 package anv32_soc_addr_pkg;
 
     localparam logic [31:0] BRAM_BASE        = 32'h0000_0000;
-    localparam logic [31:0] BRAM_SIZE        = 32'h0001_0000;  // region size; 4 KiB populated today
+    localparam logic [31:0] BRAM_SIZE        = 32'h0001_0000;  // region size; BRAM_ADDR_W populates 32 KiB by default
 
     // Reserved, no hardware yet
     localparam logic [31:0] BOOTROM_BASE     = 32'h0001_0000;

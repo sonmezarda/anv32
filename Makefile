@@ -557,12 +557,13 @@ core-tests:
 		--tests "$(TEST_NAMES)" \
 		--out-dir "$(TEST_OUT_DIR)"
 
-# Elaborate anv32_soc_top in every core and with each peripheral removed, so a
+# Elaborate anv32_soc_top in every core and with each peripheral toggled, so a
 # configuration nobody simulates still builds. Lint only; behaviour is covered
-# by core-tests on the default (everything on) configuration.
+# by core-tests (soc: every peripheral on, 4 KiB; rtos: the default build).
 SOC_CONFIGS := \
 	CORE_TYPE=0 CORE_TYPE=1 CORE_TYPE=2 \
-	HAS_CLINT=0 HAS_GPIO=0 HAS_NN=0 HAS_SYSCTRL=0 HAS_UART=0 HAS_I2C=0 \
+	HAS_CLINT=0 HAS_GPIO=0 HAS_NN=1 HAS_SYSCTRL=0 HAS_UART=0 HAS_I2C=0 \
+	HAS_NN=1,BRAM_ADDR_W=10 \
 	HAS_CLINT=0,HAS_GPIO=0,HAS_NN=0,HAS_SYSCTRL=0,HAS_UART=0,HAS_I2C=0 \
 	MTIME_FREQ=27000000
 

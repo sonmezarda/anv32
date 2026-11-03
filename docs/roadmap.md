@@ -12,6 +12,8 @@ what comes next.
   entries.
 - UART and I2C (16x2 LCD, QMC5883L magnetometer) have been tested on a Tang
   Nano 9K. The MNIST demo drives the NN accelerator from a host over UART.
+- FreeRTOS (official RISC-V port, CLINT tick) runs on `anv32im1`/`anv32im2`,
+  in simulation and on the Tang Nano 9K with the default 32 KiB, no-NN build.
 
 ## anv32i1 is frozen
 
@@ -50,6 +52,8 @@ nested interrupts, a debug module, accelerator interfaces.
   for GPIO and SYSCTRL, the register layouts are already defined; see
   [memory_map.md](memory_map.md#register-status).
 - SYSCTRL board ID / build ID / status registers
+- A UART bootloader in the reserved boot ROM region, so new software does not
+  need a new bitstream
 - DMA / stream engine for the NN accelerator
 
 ## NN accelerator
