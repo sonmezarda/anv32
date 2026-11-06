@@ -19,6 +19,9 @@ module anv32_bram_tdp #(
     genvar i;
     generate
         for (i = 0; i < 4; i++) begin : lane
+            // Keep the array in block RAM: Vivado otherwise sometimes picks
+            // distributed RAM, which costs thousands of LUTs at this size.
+            (* ram_style = "block", syn_ramstyle = "block_ram" *)
             logic [7:0] mem [0:DEPTH-1];
 
             initial begin
