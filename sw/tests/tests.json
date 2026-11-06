@@ -72,6 +72,14 @@
     "max_cycles": 10000
   },
   {
+    "name": "load_use",
+    "src": "sw/tests/load_use.S",
+    "march": "rv32im_zicsr",
+    "requires": ["m"],
+    "max_cycles": 10000,
+    "mem_wait_fixed": [1, 2, 3]
+  },
+  {
     "name": "irq_div",
     "src": "sw/tests/irq_div.S",
     "march": "rv32im_zicsr",

@@ -50,6 +50,20 @@ _start:
     addi    t1, t0, 1
     CHECK_EQ t1, 0x56, 13
 
+    // A write two and three instructions ahead of the read (in M and in W
+    // when the read is in E1 on anv32im2)
+    li      a0, 0x66
+    csrw    mscratch, a0
+    nop
+    csrr    t0, mscratch
+    CHECK_EQ t0, 0x66, 28
+    li      a0, 0x77
+    csrw    mscratch, a0
+    nop
+    nop
+    csrr    t0, mscratch
+    CHECK_EQ t0, 0x77, 29
+
     // Back-to-back writes to the same CSR
     li      a0, 1
     li      a1, 2

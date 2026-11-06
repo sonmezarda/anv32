@@ -60,12 +60,13 @@ yet must not change.
 | -------------- | ------ |
 | `trap_ecall`   | ECALL trap CSRs, mstatus MIE/MPIE/MPP, ECALL right after enabling MIE |
 | `trap_illegal` | illegal instruction traps and `mtval`, `FENCE` as a no-op |
-| `csr_rw`       | CSR instruction semantics, back-to-back CSR write/read |
+| `csr_rw`       | CSR instruction semantics, CSR reads one to three instructions after a write |
 | `mem_access`   | load/store widths, sign extension, store/load and load/store pairs |
 | `irq_basic`    | MIE/MEIE masking, interrupt taken right after it is enabled |
 | `irq_sweep`    | interrupts at every point of a loop with load-use and jumps |
 | `irq_critical` | no interrupt inside a critical section, no starvation of a short window |
 | `muldiv`       | RV32M results and corner cases, dependent multi-cycle chains |
+| `load_use`     | load results used one to three instructions later, kept across a divide or multiply stall |
 | `irq_div`      | interrupts while the divider is busy |
 | `div_mem_stall` | a divide entering E while the load/store ahead of it waits on the data bus |
 
