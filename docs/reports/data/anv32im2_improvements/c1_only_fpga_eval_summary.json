@@ -1,0 +1,27 @@
+[
+  {
+    "constraint_mhz": 50.0,
+    "fmax_mhz": 36.555,
+    "logic_levels": 13,
+    "lut": 4488,
+    "lut_detail": "4488(4134 LUT, 354 ALU, 0 ROM16)",
+    "lutram": 0,
+    "ff": 1467,
+    "bram": 6,
+    "dsp": 2,
+    "core": "anv32im2",
+    "target": "tangnano9k",
+    "tool": "gowin",
+    "device": "GW1NR-LV9QN88PC6/I5",
+    "variant": "p1r2",
+    "date": "2026-11-06T22:23:29",
+    "variants": {
+      "p0r0": 33.597,
+      "p0r1": 33.988,
+      "p0r2": 35.017,
+      "p1r0": 35.454,
+      "p1r1": 36.089,
+      "p1r2": 36.555
+    }
+  }
+]

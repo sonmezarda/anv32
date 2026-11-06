@@ -1,0 +1,49 @@
+[
+  {
+    "constraint_mhz": 125.0,
+    "fmax_mhz": 80.53475074494645,
+    "wns_ns": -4.417,
+    "logic_levels": 12,
+    "lut": 3080,
+    "lutram": 44,
+    "ff": 1506,
+    "bram": 2,
+    "dsp": 4,
+    "core": "anv32im2",
+    "target": "pynq_z2",
+    "tool": "vivado",
+    "device": "xc7z020clg400-1",
+    "variant": "extra_timing",
+    "date": "2026-11-06T22:05:09",
+    "variants": {
+      "default": 78.41907151819323,
+      "explore": 78.70916961826053,
+      "extra_timing": 80.53475074494645
+    }
+  },
+  {
+    "constraint_mhz": 50.0,
+    "fmax_mhz": 26.018,
+    "logic_levels": 16,
+    "lut": 4692,
+    "lut_detail": "4692(4311 LUT, 381 ALU, 0 ROM16)",
+    "lutram": 0,
+    "ff": 1498,
+    "bram": 6,
+    "dsp": 2,
+    "core": "anv32im2",
+    "target": "tangnano9k",
+    "tool": "gowin",
+    "device": "GW1NR-LV9QN88PC6/I5",
+    "variant": "p0r1",
+    "date": "2026-11-06T22:19:20",
+    "variants": {
+      "p0r0": 25.322,
+      "p0r1": 26.018,
+      "p0r2": 25.722,
+      "p1r0": 25.39,
+      "p1r1": 25.995,
+      "p1r2": 25.977
+    }
+  }
+]

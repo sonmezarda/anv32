@@ -7,7 +7,8 @@ placed and routed in the same FPGA wrapper. Two numbers come out of it:
 - **cycles** for a workload, from simulation (`make corebench`)
 - **Fmax and utilization** on real FPGA targets (`make fpga-eval`)
 
-Performance at Fmax is the product of the two.
+Performance at Fmax is the product of the two. The first comparison made
+with it is in [`reports/cv32e40p_comparison.md`](reports/cv32e40p_comparison.md).
 
 `make bench` ([`benchmarks.md`](benchmarks.md)) remains the tool for tuning
 the anv32 pipelines: it reads anv32 internals to break cycles down into

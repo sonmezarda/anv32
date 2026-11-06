@@ -91,6 +91,9 @@ multiplication, so they retire many more instructions. See
 Against other open-source cores, `make corebench` runs CoreMark and C
 kernels on every core in the same testbench, and `make fpga-eval` measures
 each core's own Fmax and utilization; see [`docs/corebench.md`](docs/corebench.md).
+The first comparison, with OpenHW's CV32E40P on the Tang Nano 9K and the
+PYNQ-Z2, is in
+[`docs/reports/cv32e40p_comparison.md`](docs/reports/cv32e40p_comparison.md).
 
 ## SoC
 
@@ -306,7 +309,7 @@ tools/           build, hex conversion, Spike diff, benchmark and MNIST scripts
 third_party/     FreeRTOS kernel, CoreMark, CV32E40P (submodules)
 fpga/gowin/      Gowin project
 fpga/eval/       core-only Fmax/utilization flow (Gowin, Vivado)
-docs/            memory map, simulation, benchmarks, roadmap
+docs/            memory map, simulation, benchmarks, roadmap, reports
 ```
 
 ## Status
