@@ -2,10 +2,11 @@
 // inside the ROI and prints one COREBENCH_PROBE line at the end of the run.
 // Simulation only; see docs/corebench.md.
 //
-// A load result can only be forwarded once the load reaches W, so a
-// consumer waits in D while the load is in E1, E2 or M. load_use_d1..d3
-// count stall episodes by how far behind the load the consumer is (1 =
-// the next instruction); each episode costs 4 - distance cycles.
+// A load result is forwarded from W into E1, so a consumer waits in D while
+// the load is in E1 or E2. load_use_d1 and load_use_d2 count stall episodes
+// by how far behind the load the consumer is (1 = the next instruction);
+// each costs 3 - distance cycles. raw_other counts episodes that wait on
+// something else, such as a divide result.
 module corebench_probe
     import anv32_isa_pkg::*;
 ;
@@ -13,7 +14,7 @@ module corebench_probe
     longint unsigned branches = 0, branches_taken = 0;
     longint unsigned branches_backward = 0, branches_backward_taken = 0;
     longint unsigned loads = 0, load_use_stall_cycles = 0, muldiv_stall_cycles = 0;
-    longint unsigned load_use_d1 = 0, load_use_d2 = 0, load_use_d3 = 0;
+    longint unsigned load_use_d1 = 0, load_use_d2 = 0, raw_other = 0;
     bit              stalled = 1'b0;
 
     function automatic bit reads(input dinstr_t c, input logic [4:0] rd);
@@ -25,7 +26,7 @@ module corebench_probe
         redirects = 0; jumps = 0; jumps_indirect = 0; branches = 0; branches_taken = 0;
         branches_backward = 0; branches_backward_taken = 0; loads = 0;
         load_use_stall_cycles = 0; muldiv_stall_cycles = 0; load_use_d1 = 0;
-        load_use_d2 = 0; load_use_d3 = 0;
+        load_use_d2 = 0; raw_other = 0;
         stalled = 1'b0;
     end
 
@@ -54,13 +55,12 @@ module corebench_probe
                 end
             end
 
-            // Every RAW stall on anv32im2 waits for a load (dividers stall via md_stall)
             if (raw) begin
                 load_use_stall_cycles++;
                 if (!stalled) begin
                     if (e1.valid && e1.wb_sel == WB_MEM && e1.rd_valid && reads(d, e1.rd_idx)) load_use_d1++;
                     else if (e2.valid && e2.wb_sel == WB_MEM && e2.rd_valid && reads(d, e2.rd_idx)) load_use_d2++;
-                    else load_use_d3++;
+                    else raw_other++;
                 end
             end
             stalled = raw;
@@ -72,8 +72,8 @@ module corebench_probe
         end
     end
 
-    final $display("COREBENCH_PROBE redirects=%0d jumps=%0d jumps_indirect=%0d branches=%0d branches_taken=%0d branches_backward=%0d branches_backward_taken=%0d loads=%0d load_use_stall_cycles=%0d load_use_d1=%0d load_use_d2=%0d load_use_d3=%0d muldiv_stall_cycles=%0d",
+    final $display("COREBENCH_PROBE redirects=%0d jumps=%0d jumps_indirect=%0d branches=%0d branches_taken=%0d branches_backward=%0d branches_backward_taken=%0d loads=%0d load_use_stall_cycles=%0d load_use_d1=%0d load_use_d2=%0d raw_other=%0d muldiv_stall_cycles=%0d",
                    redirects, jumps, jumps_indirect, branches, branches_taken, branches_backward,
                    branches_backward_taken, loads, load_use_stall_cycles, load_use_d1, load_use_d2,
-                   load_use_d3, muldiv_stall_cycles);
+                   raw_other, muldiv_stall_cycles);
 endmodule

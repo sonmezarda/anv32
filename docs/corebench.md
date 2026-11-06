@@ -150,8 +150,9 @@ the next rising edge.
 The anv32 probes count redirects, jumps (and how many are `jalr`),
 conditional branches by direction and outcome, retired loads, load-use
 stall cycles and multiply/divide stall cycles. On anv32im2, which forwards
-a load result only from W, `load_use_d1`..`load_use_d3` split the load-use
-stalls by how far behind the load the consuming instruction is.
+a load result from W into E1, `load_use_d1` and `load_use_d2` split the
+load-use stalls by how far behind the load the consuming instruction is, and
+`raw_other` counts stalls that wait on anything else (a divide result).
 
 ## Checks
 

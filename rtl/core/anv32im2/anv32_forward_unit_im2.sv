@@ -80,6 +80,11 @@ module anv32_forward_unit_im2
         endcase
     endfunction
 
+    // A consumer in D waits for a load still in E1 or E2. A load in M does not
+    // hold it: D never advances while M is stalled, so a consumer that leaves
+    // D with the load in M reaches E1 with the load in W, where
+    // select_e1_operand forwards rd_wdata (and decode's hold keeps that value
+    // if E1 then stalls while the load retires).
     function automatic logic src_waits_for_not_ready_result(
         input logic       src_valid_i,
         input logic [4:0] src_idx_i
@@ -87,9 +92,7 @@ module anv32_forward_unit_im2
         return (src_match_dinstr(src_valid_i, src_idx_i, dinstr_e1_i) &&
                 (dinstr_e1_i.wb_sel == WB_MEM || is_div_result(dinstr_e1_i.op))) ||
                (e2_match(src_valid_i, src_idx_i) &&
-                !e2_fwd_ready_i) ||
-               (src_match_einstr(src_valid_i, src_idx_i, einstr_i) &&
-                einstr_i.wb_sel == WB_MEM);
+                !e2_fwd_ready_i);
     endfunction
 
     function automatic logic [XLEN-1:0] select_e1_operand(

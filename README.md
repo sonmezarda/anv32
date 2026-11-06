@@ -77,9 +77,9 @@ CPI on a few of the benchmark programs (`make bench`, `-Os`):
 
 | Benchmark          | `anv32i1` | `anv32im1` | `anv32im2` |
 | ------------------ | --------: | ---------: | ---------: |
-| `c_crc32`          |     1.274 |      1.274 |      1.435 |
-| `c_matrix_mul_4x4` |     1.390 |      1.155 |      1.296 |
-| `c_fir_filter`     |     1.338 |      1.158 |      1.395 |
+| `c_crc32`          |     1.274 |      1.274 |      1.419 |
+| `c_matrix_mul_4x4` |     1.390 |      1.155 |      1.232 |
+| `c_fir_filter`     |     1.338 |      1.158 |      1.316 |
 | `branch_taken`     |     2.316 |      2.316 |      2.974 |
 
 On `anv32i1`, the matrix and FIR kernels run without `M` and call libgcc for
