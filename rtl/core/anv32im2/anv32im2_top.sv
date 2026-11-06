@@ -60,8 +60,7 @@ module anv32im2_top
     logic [XLEN-1:0]        rs1_D_din, rs2_D_din, rs1_e1_rdata, rs2_e1_rdata;
     logic [XLEN-1:0]        rs1_e2_rdata, rs2_e2_rdata, csr_e2_rdata, csr_e2_rdata_fwd;
     logic                   stall_im2_raw;
-    logic [11:0]            csr_addr;
-    logic [XLEN-1:0]        csr_rdata, csr_rdata_D, csr_e1_rdata;
+    logic [XLEN-1:0]        csr_rdata, csr_e1_rdata;
     logic                   csr_we;
     logic [11:0]            csr_waddr;
     logic [XLEN-1:0]        csr_wdata, mtvec, mepc;
@@ -249,10 +248,6 @@ module anv32im2_top
         .finstr_o(finstr)
     );
 
-    always_comb begin : csr_d_bypass_comb
-        csr_rdata_D = csr_bypass_value(csr_addr, csr_rdata);
-    end
-
     // A CSR write directly ahead of a CSR read is in M when the read reaches
     // E2, one stage after E1 latched its operand.
     always_comb begin : csr_e2_fwd_comb
@@ -264,6 +259,9 @@ module anv32im2_top
         end
     end
 
+    // CSRs are read in E1, not D: the read address comes from a register
+    // instead of the fetch BRAM and decoder, which keeps the CSR read mux off
+    // the fetch-to-decode path. Older writes still in M or W are bypassed.
     always_comb begin : csr_e_fwd_comb
         if (einstr.valid && einstr.is_csr && einstr.csr_we &&
             einstr.csr_addr == dinstr.csr_addr) begin
@@ -272,7 +270,7 @@ module anv32im2_top
             minstr.csr_addr == dinstr.csr_addr) begin
             csr_e1_rdata = minstr.csr_wdata;
         end else begin
-            csr_e1_rdata = dinstr.csr_rdata;
+            csr_e1_rdata = csr_rdata;
         end
     end
 
@@ -281,17 +279,17 @@ module anv32im2_top
         .hold_i(stall_e_eff),
         .rs1_hold_i(rs1_e1_rdata),
         .rs2_hold_i(rs2_e1_rdata),
-        .csr_hold_i(csr_e1_rdata),
+        .csr_hold_i('0),               // CSRs are read in E1
         .rst_i(rst_i),
         .flush_i(flush_D),
         .stall_i(stall_d_eff),
         .finstr_i(finstr),
         .rs1_rdata_i(rs1_D_din),
         .rs2_rdata_i(rs2_D_din),
-        .csr_rdata_i(csr_rdata_D),
+        .csr_rdata_i('0),
         .rs1_idx_o(rs1_idx),
         .rs2_idx_o(rs2_idx),
-        .csr_addr_o(csr_addr),
+        .csr_addr_o(),
         .dinstr_decode_o(dinstr_decode),
         .dinstr_o(dinstr)
     );
@@ -381,7 +379,7 @@ module anv32im2_top
     anv32_csr #(.MISA_VALUE(MISA_MXL32 | MISA_I | (HAS_M ? MISA_M : '0))) csr (
         .clk_i        (clk_i),
         .rst_i        (rst_i),
-        .csr_raddr_i  (csr_addr),
+        .csr_raddr_i  (dinstr.csr_addr),
         .csr_rdata_o  (csr_rdata),
         .csr_we_i     (csr_we),
         .csr_waddr_i  (csr_waddr),

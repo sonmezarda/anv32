@@ -45,7 +45,7 @@ flowchart LR
     end
     subgraph c2 ["anv32im2"]
         direction LR
-        F2[Fetch] --> D2[Decode] --> X1["E1<br/>operand forwarding"] --> X2["E2<br/>execute, traps"] --> M2[Memory] --> W2[Writeback]
+        F2[Fetch] --> D2[Decode] --> X1["E1<br/>operand forwarding,<br/>CSR read"] --> X2["E2<br/>execute, traps"] --> M2[Memory] --> W2[Writeback]
         X2 -. forward .-> X1
         M2 -. forward .-> X1
         W2 -. forward .-> X1
