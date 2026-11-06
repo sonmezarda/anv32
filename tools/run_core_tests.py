@@ -117,16 +117,20 @@ def soc_sources() -> list[str]:
 
 def build_tb(args: argparse.Namespace, repo: Path, suite: str, core: str, out_dir: Path,
              reset_pc: int = 0) -> Path:
-    mdir = out_dir / "obj" / f"{suite}_{core}"
+    mdir = out_dir / "obj" / f"{suite}_{core}{'_mulpipe' if args.mul_pipe else ''}"
     mdir.mkdir(parents=True, exist_ok=True)
     if suite in SOC_SUITE_PARAMS:
         top = "tb_soc_test"
         design = [f"-GCORE_TYPE={CORE_TYPES[core]}", *SOC_SUITE_PARAMS[suite],
                   *soc_sources(), "sim/tb/soc/tb_soc_test.sv"]
+        if args.mul_pipe:
+            design.insert(0, "-GMUL_PIPE=1")
     else:
         top = "tb_core_test"
         design = [f"-D{CORE_DEFINES[core]}", f"-GRESET_PC=32'h{reset_pc:08x}",
                   *CORE_SOURCES[core], *CORE_TB_SOURCES, "sim/tb/common/tb_core_test.sv"]
+        if args.mul_pipe:
+            design.insert(0, "-GMUL_PIPE=1")
     run(
         [
             args.verilator,
@@ -176,6 +180,8 @@ def main() -> int:
     parser.add_argument("--out-dir", default="build/core_tests")
     parser.add_argument("--no-mem-wait", action="store_true",
                         help="skip the extra wait-state run on cores with mem_ready")
+    parser.add_argument("--mul-pipe", action="store_true",
+                        help="build anv32im2 with MUL_PIPE=1 (two-cycle registered multiply)")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--warn", action="store_true")
     parser.add_argument("--python", default="python3")

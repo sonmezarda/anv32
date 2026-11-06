@@ -3,6 +3,7 @@ module anv32im2_top
     import anv32_isa_pkg::*;
 #(
     parameter bit              HAS_M          = 1'b1,
+    parameter bit              MUL_PIPE       = 1'b0,  // two-cycle registered multiply
     parameter logic [XLEN-1:0] PC_RESET_VALUE = RESET_PC
 )(
     input  logic            clk_i, rst_i, stall_i, pc_jmp_en_i,
@@ -309,7 +310,7 @@ module anv32im2_top
         .csr_e2_rdata_o (csr_e2_rdata)
     );
 
-    anv32_execute_im_c2 #(.HAS_M(HAS_M)) E2(
+    anv32_execute_im_c2 #(.HAS_M(HAS_M), .MUL_PIPE(MUL_PIPE)) E2(
         .clk_i(clk_i),
         .rst_i(rst_i),
         .stall_i(stall_e_eff),

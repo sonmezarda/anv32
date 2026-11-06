@@ -21,7 +21,8 @@
 module tb_core_test
     import anv32_bus_pkg::*;
 #(
-    parameter logic [31:0] RESET_PC = 32'h0000_0000
+    parameter logic [31:0] RESET_PC = 32'h0000_0000,
+    parameter bit          MUL_PIPE = 1'b0      // anv32im2 only
 );
     localparam int unsigned RAM_ADDR_W = 22;            // 4 MiB, wraps above
     localparam int unsigned RAM_WORDS  = 1 << (RAM_ADDR_W - 2);
@@ -57,7 +58,7 @@ module tb_core_test
 `elsif ANV32_BENCH_CORE_ANV32IM1
     anv32im1_top #(.HAS_M(1'b1), .PC_RESET_VALUE(RESET_PC)) dut (
 `elsif ANV32_BENCH_CORE_ANV32IM2
-    anv32im2_top #(.HAS_M(1'b1), .PC_RESET_VALUE(RESET_PC)) dut (
+    anv32im2_top #(.HAS_M(1'b1), .MUL_PIPE(MUL_PIPE), .PC_RESET_VALUE(RESET_PC)) dut (
 `else
     initial $fatal(1, "Define one ANV32_BENCH_CORE_* macro");
     anv32im2_top dut (

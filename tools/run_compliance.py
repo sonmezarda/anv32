@@ -170,6 +170,8 @@ def main() -> int:
     parser.add_argument("--third-party", default="build/third_party")
     parser.add_argument("--max-cycles", type=int, default=2000000)
     parser.add_argument("--no-mem-wait", action="store_true")
+    parser.add_argument("--mul-pipe", action="store_true",
+                        help="build anv32im2 with MUL_PIPE=1 (two-cycle registered multiply)")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--warn", action="store_true")
     parser.add_argument("--python", default="python3")

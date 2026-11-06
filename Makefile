@@ -95,6 +95,7 @@ TEST_CORES ?= anv32i1,anv32im1,anv32im2
 TEST_SUITES ?= core,soc,rtos
 TEST_NAMES ?= all
 TEST_OUT_DIR ?= build/core_tests
+MUL_PIPE ?= 0
 ASM_HARD_CYCLES ?= 180
 ASM_HARD_SPIKE_INSNS ?= 180
 ASM_HARD_TESTS ?= \
@@ -621,7 +622,8 @@ core-tests:
 		--cores "$(TEST_CORES)" \
 		--suites "$(TEST_SUITES)" \
 		--tests "$(TEST_NAMES)" \
-		--out-dir "$(TEST_OUT_DIR)"
+		--out-dir "$(TEST_OUT_DIR)" \
+		$(if $(filter 1,$(MUL_PIPE)),--mul-pipe)
 
 # The UART bootloader on the SoC, every core (sim/tb/soc/tb_soc_boot.sv)
 boot-test:
@@ -631,7 +633,7 @@ boot-test:
 # configuration nobody simulates still builds. Lint only; behaviour is covered
 # by core-tests (soc: every peripheral on, 4 KiB; rtos: the default build).
 SOC_CONFIGS := \
-	CORE_TYPE=0 CORE_TYPE=1 CORE_TYPE=2 \
+	CORE_TYPE=0 CORE_TYPE=1 CORE_TYPE=2 CORE_TYPE=2,MUL_PIPE=1 \
 	HAS_CLINT=0 HAS_GPIO=0 HAS_NN=1 HAS_I2C=0 HAS_BOOTLOADER=0 \
 	HAS_SYSCTRL=0,HAS_BOOTLOADER=0 HAS_UART=0,HAS_BOOTLOADER=0 \
 	HAS_NN=1,BRAM_ADDR_W=10 \
@@ -652,11 +654,13 @@ soc-configs:
 # Official RISC-V test suites (cloned into build/third_party on first use).
 # riscv-tests are self-checking; riscv-arch-test compares against Spike.
 riscv-tests:
-	$(PYTHON) tools/run_compliance.py --cores "$(TEST_CORES)" --suites rv32ui,rv32um,rv32mi
+	$(PYTHON) tools/run_compliance.py --cores "$(TEST_CORES)" --suites rv32ui,rv32um,rv32mi \
+		$(if $(filter 1,$(MUL_PIPE)),--mul-pipe)
 
 arch-test:
 	$(PYTHON) tools/run_compliance.py --cores "$(TEST_CORES)" \
-		--suites arch-I,arch-M,arch-privilege --spike "$(SPIKE)"
+		--suites arch-I,arch-M,arch-privilege --spike "$(SPIKE)" \
+		$(if $(filter 1,$(MUL_PIPE)),--mul-pipe)
 
 # Everything that runs without Spike or hardware: unit tests, SoC configuration
 # lint, core/SoC tests, riscv-tests and the benchmark self-checks.
@@ -883,6 +887,7 @@ help:
 	@echo "  BENCH_CORES=list     Core selection for make bench"
 	@echo "  BENCH_FMAX=core=MHz  Fmax values for normalized benchmark reporting"
 	@echo "  BENCH_OPT=-Os|-O2    C benchmark optimization level"
+	@echo "  MUL_PIPE=1           core-tests/riscv-tests/arch-test with anv32im2's registered multiply"
 	@echo "  COREBENCH_CORES=list Cores for make corebench (default all, see sim/corebench/cores.json)"
 	@echo "  COREBENCH_BENCHMARKS=all|name,tag"
 	@echo "                       Benchmark selection for make corebench"

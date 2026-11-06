@@ -4,7 +4,12 @@ module anv32_execute_im_c2
     import anv32_config_pkg::*;
     import anv32_isa_pkg::*;
 #(
-    parameter bit HAS_M = 1'b1
+    parameter bit HAS_M    = 1'b1,
+    // 1: register the product. A multiply then spends two cycles in E2 and
+    // forwards its result in the second, which takes the DSP multiplier off
+    // the E2-to-E1 forwarding path (it limits Fmax on 7-series parts, whose
+    // DSPs need a cascade for 32x32). 0: single-cycle multiply.
+    parameter bit MUL_PIPE = 1'b0
 )(
     input  logic               clk_i,
     input  logic               rst_i,
@@ -44,6 +49,7 @@ module anv32_execute_im_c2
     logic [XLEN-1:0] muldiv_result;
     logic            md_stall;
     logic            is_mul_op, is_div_op;
+    logic            mul_wait;          // MUL_PIPE: product not registered yet
     logic            div_start, div_busy, div_done;
     logic            div_active_q, div_ready_q;
     logic            div_emit_accept;
@@ -61,15 +67,37 @@ module anv32_execute_im_c2
 
             assign div_start     = is_div_op && !div_active_q;
             assign muldiv_result = is_mul_op ? mul_result : div_emit_result;
-            assign md_stall      = (div_start || (div_active_q && !div_ready_q && !div_done)) && !kill_i;
+            assign md_stall      = (div_start || (div_active_q && !div_ready_q && !div_done) || mul_wait) &&
+                                   !kill_i;
             assign div_emit_result = div_done ? div_result : div_result_q;
+
+            logic [XLEN-1:0] mul_product;
 
             anv32_mul_comb u_mul (
                 .op_i    (dinstr_e2_i.op),
                 .a_i     (rs1_e2_rdata_i),
                 .b_i     (rs2_e2_rdata_i),
-                .result_o(mul_result)
+                .result_o(mul_product)
             );
+
+            if (MUL_PIPE) begin : g_mul_pipe
+                logic [XLEN-1:0] mul_q;
+                logic            mul_ready_q;
+
+                // First cycle: stall E2 and register the product. Second
+                // cycle: the result is ready; clear once the multiply leaves.
+                always_ff @(posedge clk_i) begin
+                    if (rst_i || kill_i || !stall_i) mul_ready_q <= 1'b0;
+                    else if (is_mul_op)              mul_ready_q <= 1'b1;
+                    if (is_mul_op && !mul_ready_q)   mul_q <= mul_product;
+                end
+
+                assign mul_wait   = is_mul_op && !mul_ready_q;
+                assign mul_result = mul_q;
+            end else begin : g_mul_comb
+                assign mul_wait   = 1'b0;
+                assign mul_result = mul_product;
+            end
 
             anv32_div u_div (
                 .clk_i   (clk_i),
@@ -86,6 +114,7 @@ module anv32_execute_im_c2
         end else begin : g_no_muldiv
             assign is_mul_op      = 1'b0;
             assign is_div_op      = 1'b0;
+            assign mul_wait       = 1'b0;
             assign div_start      = 1'b0;
             assign div_busy       = 1'b0;
             assign div_done       = 1'b0;
@@ -190,7 +219,8 @@ module anv32_execute_im_c2
     assign fwd_valid_o  = dinstr_e2_i.valid && dinstr_e2_i.rd_valid;
     assign fwd_ready_o  = fwd_valid_o &&
                           dinstr_e2_i.wb_sel != WB_MEM &&
-                          !(HAS_M && is_div_op && !(div_ready_q || div_done));
+                          !(HAS_M && is_div_op && !(div_ready_q || div_done)) &&
+                          !mul_wait;
     assign fwd_rd_idx_o = dinstr_e2_i.rd_idx;
 
     always_comb begin : fwd_data_comb

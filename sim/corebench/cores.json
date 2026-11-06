@@ -73,6 +73,33 @@
       "rtl/core/pipe5/anv32_writeback_c1.sv"
     ]
   },
+  "anv32im2_mulpipe": {
+    "description": "anv32im2 with MUL_PIPE=1: two-cycle registered multiply",
+    "isa": "rv32im",
+    "adapter": "sim/corebench/adapters/corebench_anv32im2_mulpipe.sv",
+    "probe": "sim/corebench/probes/corebench_probe_anv32im2.sv",
+    "sources": [
+      "rtl/include/anv32_config_pkg.sv",
+      "rtl/include/anv32_isa_pkg.sv",
+      "rtl/core/anv32im2/anv32_execute_im_c1.sv",
+      "rtl/core/anv32im2/anv32_execute_im_c2.sv",
+      "rtl/core/anv32im2/anv32_forward_unit_im2.sv",
+      "rtl/core/anv32im2/anv32im2_top.sv",
+      "rtl/core/common/anv32_alu.sv",
+      "rtl/core/common/anv32_csr.sv",
+      "rtl/core/common/anv32_csr_exec.sv",
+      "rtl/core/common/anv32_decoder.sv",
+      "rtl/core/common/anv32_div.sv",
+      "rtl/core/common/anv32_mul_comb.sv",
+      "rtl/core/common/anv32_regfile.sv",
+      "rtl/core/pipe5/anv32_decode_c1.sv",
+      "rtl/core/pipe5/anv32_fetch_c1.sv",
+      "rtl/core/pipe5/anv32_forward_unit.sv",
+      "rtl/core/pipe5/anv32_hazard_basic.sv",
+      "rtl/core/pipe5/anv32_memory_c1.sv",
+      "rtl/core/pipe5/anv32_writeback_c1.sv"
+    ]
+  },
   "cv32e40p": {
     "description": "OpenHW CV32E40P, 4-stage pipeline, COREV_PULP=0, FPU=0",
     "isa": "rv32imc",

@@ -11,7 +11,8 @@
 module tb_soc_test #(
     parameter int unsigned CORE_TYPE   = 2,
     parameter int unsigned BRAM_ADDR_W = 10,
-    parameter bit          HAS_NN      = 1'b1
+    parameter bit          HAS_NN      = 1'b1,
+    parameter bit          MUL_PIPE    = 1'b0      // anv32im2 only
 );
     localparam logic [31:0] LED_PASS       = 32'h2;
     localparam logic [31:0] LED_GPIO_PULSE = 32'h5;
@@ -31,6 +32,7 @@ module tb_soc_test #(
     // defaults anv32_soc_top currently carries for an FPGA build.
     anv32_soc_top #(
         .CORE_TYPE(CORE_TYPE),
+        .MUL_PIPE(MUL_PIPE),
         .BRAM_ADDR_W(BRAM_ADDR_W),
         .POR_CYCLES(4),
         .INIT_FILE(""),

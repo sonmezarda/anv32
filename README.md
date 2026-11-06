@@ -65,7 +65,9 @@ Common features:
   instruction.
 - Operand forwarding from M and W; load-use hazards stall
 - Separate instruction and data ports into a dual-port BRAM
-- Single-cycle multiplier and a 32-cycle radix-2 divider (`im` cores)
+- Single-cycle multiplier and a 32-cycle radix-2 divider (`im` cores);
+  `anv32im2` can register the multiplier output instead (`MUL_PIPE`), which
+  costs a cycle per multiply and raises Fmax on 7-series FPGAs
 - valid/ready handshake on both the instruction and the data port, so the
   pipeline can wait on slow memories and devices
 
@@ -98,6 +100,7 @@ and every build option is one of its parameters:
 | Parameter | Default | Meaning |
 |---|---|---|
 | `CORE_TYPE` | `2` | 0 = i1, 1 = im1, 2 = im2 |
+| `MUL_PIPE` | `0` | `anv32im2` only: register the multiplier output, so a multiply takes two cycles. Raises Fmax on 7-series FPGAs; no gain on the GW1NR-9 |
 | `BRAM_ADDR_W` | `13` | Word address width of the code/data BRAM (13 = 32 KiB) |
 | `CLK_FREQ` | `27_000_000` | Clock in Hz; sets UART baud and I2C SCL timing |
 | `MTIME_FREQ` | `1_000_000` | CLINT `mtime` rate in Hz; must divide `CLK_FREQ` |

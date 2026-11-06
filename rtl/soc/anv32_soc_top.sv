@@ -8,6 +8,7 @@ module anv32_soc_top
     import anv32_soc_addr_pkg::*;
 #(
     parameter int unsigned CORE_TYPE   = 2,           // 0 = i1, 1 = im1, 2 = im2
+    parameter bit          MUL_PIPE    = 1'b0,        // im2: two-cycle registered multiply
     parameter int unsigned BRAM_ADDR_W = 13,
     parameter int unsigned POR_CYCLES  = 8,
     parameter              INIT_FILE   = "src/prog",
@@ -452,7 +453,7 @@ module anv32_soc_top
                 .mem_we(mem_we)
             );
         end else begin : g_core_im2
-            anv32im2_top #(.HAS_M(1'b1), .PC_RESET_VALUE(RESET_PC)) core (
+            anv32im2_top #(.HAS_M(1'b1), .MUL_PIPE(MUL_PIPE), .PC_RESET_VALUE(RESET_PC)) core (
                 .clk_i(clk_i),
                 .rst_i(rst_i),
                 .stall_i(1'b0),
