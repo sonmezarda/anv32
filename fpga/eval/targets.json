@@ -1,0 +1,33 @@
+{
+  "tangnano9k": {
+    "description": "Sipeed Tang Nano 9K: Gowin GW1NR-9C, LUT4 fabric, speed grade C6/I5",
+    "tool": "gowin",
+    "device": "GW1NR-LV9QN88PC6/I5",
+    "device_name": "GW1NR-9C",
+    "constraints": [
+      "fpga/eval/constraints/tangnano9k.cst",
+      "fpga/eval/constraints/tangnano9k.sdc"
+    ],
+    "variants": {
+      "p0r0": "set_option -place_option 0; set_option -route_option 0",
+      "p0r1": "set_option -place_option 0; set_option -route_option 1",
+      "p0r2": "set_option -place_option 0; set_option -route_option 2",
+      "p1r0": "set_option -place_option 1; set_option -route_option 0",
+      "p1r1": "set_option -place_option 1; set_option -route_option 1",
+      "p1r2": "set_option -place_option 1; set_option -route_option 2"
+    }
+  },
+  "pynq_z2": {
+    "description": "TUL PYNQ-Z2: AMD Zynq-7020 programmable logic, 7-series LUT6 fabric, speed grade -1",
+    "tool": "vivado",
+    "device": "xc7z020clg400-1",
+    "constraints": [
+      "fpga/eval/constraints/pynq_z2.xdc"
+    ],
+    "variants": {
+      "default": "set eval_place_directive Default",
+      "explore": "set eval_place_directive Explore",
+      "extra_timing": "set eval_place_directive ExtraTimingOpt"
+    }
+  }
+}

@@ -86,6 +86,10 @@ On `anv32i1`, the matrix and FIR kernels run without `M` and call libgcc for
 multiplication, so they retire many more instructions. See
 [`docs/benchmarks.md`](docs/benchmarks.md).
 
+Against other open-source cores, `make corebench` runs CoreMark and C
+kernels on every core in the same testbench, and `make fpga-eval` measures
+each core's own Fmax and utilization; see [`docs/corebench.md`](docs/corebench.md).
+
 ## SoC
 
 [`rtl/soc/anv32_soc_top.sv`](rtl/soc/anv32_soc_top.sv) is the only SoC top,
@@ -226,7 +230,8 @@ Requirements:
 - `spike` (optional, for `make arch-test` and the commit-log diff tests)
 - Gowin IDE (for the FPGA build)
 
-FreeRTOS is a submodule; fetch it once with `git submodule update --init`.
+FreeRTOS, CoreMark and CV32E40P are submodules; fetch them once with
+`git submodule update --init`.
 
 ```sh
 make all          # stage-level unit tests
@@ -235,6 +240,7 @@ make boot-test    # UART bootloader end to end on all three cores
 make riscv-tests  # official riscv-tests (rv32ui, rv32um, rv32mi)
 make bench        # benchmarks on all three cores
 make check        # all of the above
+make corebench    # CoreMark and C kernels on anv32 and the reference cores
 make arch-test    # official riscv-arch-test, compared against Spike
 make cpu-run ASM=sw/examples/hazard_raw.S CYCLES=60   # pipeline trace
 make asm-hard-test                                    # commit-log diff against Spike
@@ -290,11 +296,13 @@ rtl/peripherals/ clint, uart, i2c, gpio, sysctrl, nn_accelerator
 rtl/soc/         SoC top, bus decoder/bridge/read pipe/register front end
 rtl/include/     ISA, config and register-map packages
 sim/tb/          Verilator testbenches
+sim/corebench/   cross-core benchmark testbench, core registry and adapters
 sw/              crt0, linker scripts, examples, FPGA programs, FreeRTOS port
                  files and demos, benchmarks, tests, compliance-test model files
 tools/           build, hex conversion, Spike diff, benchmark and MNIST scripts
-third_party/     FreeRTOS kernel (submodule)
+third_party/     FreeRTOS kernel, CoreMark, CV32E40P (submodules)
 fpga/gowin/      Gowin project
+fpga/eval/       core-only Fmax/utilization flow (Gowin, Vivado)
 docs/            memory map, simulation, benchmarks, roadmap
 ```
 

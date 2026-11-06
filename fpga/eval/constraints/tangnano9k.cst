@@ -1,0 +1,19 @@
+// Tang Nano 9K (GW1NR-LV9QN88PC6/I5) pins for fpga/eval/core_eval_top.sv:
+// same clock, reset button, interrupt and LEDs as the anv32 SoC project.
+IO_LOC "clk_i" 52;
+IO_PORT "clk_i" PULL_MODE=NONE IO_TYPE=LVCMOS33;
+
+IO_LOC "rst_n_i" 4;
+IO_PORT "rst_n_i" PULL_MODE=UP IO_TYPE=LVCMOS18;
+
+IO_LOC "irq_i" 3;
+IO_PORT "irq_i" PULL_MODE=UP IO_TYPE=LVCMOS18;
+
+IO_LOC "led_o[0]" 16;
+IO_PORT "led_o[0]" PULL_MODE=NONE DRIVE=8 IO_TYPE=LVCMOS18;
+IO_LOC "led_o[1]" 15;
+IO_PORT "led_o[1]" PULL_MODE=NONE DRIVE=8 IO_TYPE=LVCMOS18;
+IO_LOC "led_o[2]" 14;
+IO_PORT "led_o[2]" PULL_MODE=NONE DRIVE=8 IO_TYPE=LVCMOS18;
+IO_LOC "led_o[3]" 13;
+IO_PORT "led_o[3]" PULL_MODE=NONE DRIVE=8 IO_TYPE=LVCMOS18;

@@ -1,3 +1,9 @@
 [submodule "third_party/FreeRTOS-Kernel"]
 	path = third_party/FreeRTOS-Kernel
 	url = https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+[submodule "third_party/cv32e40p"]
+	path = third_party/cv32e40p
+	url = https://github.com/openhwgroup/cv32e40p.git
+[submodule "third_party/coremark"]
+	path = third_party/coremark
+	url = https://github.com/eembc/coremark.git

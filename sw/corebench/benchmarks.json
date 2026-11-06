@@ -1,0 +1,90 @@
+{
+  "coremark": {
+    "description": "EEMBC CoreMark 1.0: linked list, matrix, state machine and CRC",
+    "sources": [
+      "third_party/coremark/core_list_join.c",
+      "third_party/coremark/core_main.c",
+      "third_party/coremark/core_matrix.c",
+      "third_party/coremark/core_state.c",
+      "third_party/coremark/core_util.c",
+      "sw/corebench/coremark/core_portme.c",
+      "sw/corebench/coremark/ee_printf.c"
+    ],
+    "include_dirs": [
+      "sw/corebench/coremark",
+      "third_party/coremark"
+    ],
+    "iterations": 10,
+    "iterations_define": "ITERATIONS",
+    "metric": "CoreMark/MHz",
+    "check": "coremark",
+    "max_cycles": 40000000,
+    "tags": [
+      "coremark",
+      "standard"
+    ]
+  },
+  "crc32": {
+    "description": "sw/benchmarks_c/crc32.c kernel, whole run timed",
+    "sources": [
+      "sw/benchmarks_c/crc32.c"
+    ],
+    "expect_exit": 1,
+    "max_cycles": 200000,
+    "tags": [
+      "kernel",
+      "bitwise",
+      "branch"
+    ]
+  },
+  "matrix_mul_4x4": {
+    "description": "sw/benchmarks_c/matrix_mul_4x4.c kernel, whole run timed",
+    "sources": [
+      "sw/benchmarks_c/matrix_mul_4x4.c"
+    ],
+    "expect_exit": 1,
+    "max_cycles": 200000,
+    "tags": [
+      "kernel",
+      "mul",
+      "memory"
+    ]
+  },
+  "fir_filter": {
+    "description": "sw/benchmarks_c/fir_filter.c kernel, whole run timed",
+    "sources": [
+      "sw/benchmarks_c/fir_filter.c"
+    ],
+    "expect_exit": 1,
+    "max_cycles": 500000,
+    "tags": [
+      "kernel",
+      "mul",
+      "memory"
+    ]
+  },
+  "memcpy_words": {
+    "description": "sw/benchmarks_c/memcpy_words.c kernel, whole run timed",
+    "sources": [
+      "sw/benchmarks_c/memcpy_words.c"
+    ],
+    "expect_exit": 1,
+    "max_cycles": 200000,
+    "tags": [
+      "kernel",
+      "memory"
+    ]
+  },
+  "branchy_state": {
+    "description": "sw/benchmarks_c/branchy_state.c kernel, whole run timed",
+    "sources": [
+      "sw/benchmarks_c/branchy_state.c"
+    ],
+    "expect_exit": 1,
+    "max_cycles": 200000,
+    "tags": [
+      "kernel",
+      "branch"
+    ]
+  }
+}

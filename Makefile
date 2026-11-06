@@ -79,6 +79,18 @@ BENCH_OUT_DIR ?= build/bench
 BENCH_FMAX_JSON ?=
 BENCH_FMAX ?=
 BENCH_OPT ?= -Os
+COREBENCH_CORES ?= all
+COREBENCH_BENCHMARKS ?= all
+COREBENCH_ISA ?= native
+COREBENCH_OPT ?= -O2
+COREBENCH_OUT_DIR ?= build/corebench
+COREBENCH_FMAX_JSON ?= $(wildcard build/fpga_eval/summary.json)
+FPGA_EVAL_CORES ?= all
+FPGA_EVAL_TARGETS ?= all
+FPGA_EVAL_VARIANTS ?= default
+FPGA_EVAL_JOBS ?= 2
+GOWIN_SH ?= gw_sh
+VIVADO ?= vivado
 TEST_CORES ?= anv32i1,anv32im1,anv32im2
 TEST_SUITES ?= core,soc,rtos
 TEST_NAMES ?= all
@@ -323,7 +335,7 @@ check_test = $(if $(filter $(1),$(TESTS)),,$(error Unknown test '$(1)'. Known te
 
 .DEFAULT_GOAL := de
 
-.PHONY: all help list test hex sw-fetch boot load boot-test cpu-run mem-ready-trace core-tests soc-configs riscv-tests arch-test check bench fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
+.PHONY: all help list test hex sw-fetch boot load boot-test cpu-run mem-ready-trace core-tests soc-configs riscv-tests arch-test check bench corebench fpga-eval fpga fpga-c fpga-asm asm-golden-run asm-diff-test asm-hard-test c-fetch c-run $(TESTS) build-% run-% clean
 .SECONDEXPANSION:
 
 all: $(addprefix run-,$(TESTS))
@@ -661,6 +673,20 @@ bench:
 	if [ -n "$(BENCH_FMAX)" ]; then args+=(--fmax "$(BENCH_FMAX)"); fi; \
 	$(PYTHON) tools/run_benchmarks.py "$${args[@]}"
 
+# Cross-core benchmarks (CoreMark and C kernels) on every core in
+# sim/corebench/cores.json; reads Fmax from fpga-eval when it has run.
+corebench:
+	$(PYTHON) tools/run_corebench.py --cores "$(COREBENCH_CORES)" \
+		--benchmarks "$(COREBENCH_BENCHMARKS)" --isa "$(COREBENCH_ISA)" \
+		--opt="$(COREBENCH_OPT)" --out-dir "$(COREBENCH_OUT_DIR)" \
+		$(if $(COREBENCH_FMAX_JSON),--fmax-json "$(COREBENCH_FMAX_JSON)")
+
+# Core-only Fmax and utilization on the targets in fpga/eval/targets.json
+fpga-eval:
+	$(PYTHON) tools/fpga_eval.py --cores "$(FPGA_EVAL_CORES)" \
+		--targets "$(FPGA_EVAL_TARGETS)" --variants "$(FPGA_EVAL_VARIANTS)" \
+		--jobs $(FPGA_EVAL_JOBS) --gowin "$(GOWIN_SH)" --vivado "$(VIVADO)"
+
 asm-golden-run:
 	@set -euo pipefail; \
 	src="$(GOLDEN_ASM_SRC)"; \
@@ -816,6 +842,11 @@ help:
 	@echo "                       Include Fmax-normalized time and MIPS columns"
 	@echo "  make bench BENCHMARKS=c BENCH_OPT=-O2"
 	@echo "                       Compile C benchmarks with a selected optimization"
+	@echo "  make corebench      Run CoreMark and C kernels on every core, anv32 and others"
+	@echo "  make corebench COREBENCH_CORES=anv32im2,cv32e40p COREBENCH_ISA=rv32im"
+	@echo "                       Select cores and build every core the same rv32im binary"
+	@echo "  make fpga-eval GOWIN_SH=... VIVADO=..."
+	@echo "                       Core-only Fmax and utilization on Tang Nano 9K and PYNQ-Z2"
 	@echo "  make cpu-run CYCLES=40 TRACE=1"
 	@echo "                       Limit cycles and emit $(OBJ_DIR)/cpu_trace.vcd"
 	@echo "  make cpu-run PIPELINE_LOG=build/sw/trace.log"
@@ -852,6 +883,20 @@ help:
 	@echo "  BENCH_CORES=list     Core selection for make bench"
 	@echo "  BENCH_FMAX=core=MHz  Fmax values for normalized benchmark reporting"
 	@echo "  BENCH_OPT=-Os|-O2    C benchmark optimization level"
+	@echo "  COREBENCH_CORES=list Cores for make corebench (default all, see sim/corebench/cores.json)"
+	@echo "  COREBENCH_BENCHMARKS=all|name,tag"
+	@echo "                       Benchmark selection for make corebench"
+	@echo "  COREBENCH_ISA=native|rv32im,..."
+	@echo "                       ISAs to build for; cores skip ISAs they lack (default native)"
+	@echo "  COREBENCH_OPT=-O2    corebench optimization level"
+	@echo "  COREBENCH_FMAX_JSON=file"
+	@echo "                       Fmax source (default build/fpga_eval/summary.json if present)"
+	@echo "  FPGA_EVAL_CORES=list, FPGA_EVAL_TARGETS=list, FPGA_EVAL_JOBS=n"
+	@echo "                       Selection and parallelism for make fpga-eval"
+	@echo "  FPGA_EVAL_VARIANTS=default|all|names"
+	@echo "                       Placement variants per target (fpga/eval/targets.json); best one is kept"
+	@echo "  GOWIN_SH=path, VIVADO=path"
+	@echo "                       Vendor tools; gw_sh.exe / vivado.bat work from WSL"
 	@echo
 	@echo "Registered tests:"
 	@printf '  %s\n' $(TESTS)

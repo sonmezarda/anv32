@@ -3,6 +3,10 @@
 The synthetic benchmark suite compares cores by completed work, cycle count,
 branch behavior, and optional Fmax-normalized time.
 
+It reads anv32 internals to break cycles down into stall causes, so it only
+runs the anv32 cores. To compare against other cores, use
+[corebench](corebench.md).
+
 ## Run
 
 ```sh
