@@ -316,6 +316,7 @@ module anv32im2_top
         .rst_i(rst_i),
         .stall_i(stall_e_eff),
         .kill_i(irq_req),
+        .mem_wait_i(mem_wait_stall),
         .dinstr_e2_i    (dinstr_e2),
         .rs1_e2_rdata_i (rs1_e2_rdata),
         .rs2_e2_rdata_i (rs2_e2_rdata),

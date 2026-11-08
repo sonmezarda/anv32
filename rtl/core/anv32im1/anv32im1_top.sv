@@ -294,6 +294,7 @@ module anv32im1_top
         .rst_i(rst_i),
         .stall_i(stall_e_eff),
         .kill_i(irq_req),
+        .mem_wait_i(mem_wait_stall),
         .dinstr_i(dinstr),
         .rs1_rdata_i(rs1_E_din),
         .rs2_rdata_i(rs2_E_din),

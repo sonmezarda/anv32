@@ -60,6 +60,7 @@ yet must not change.
 | `irq_critical` | no interrupt inside a critical section, no starvation of a short window |
 | `muldiv`       | RV32M results and corner cases, dependent multi-cycle chains |
 | `irq_div`      | interrupts while the divider is busy |
+| `div_mem_stall` | a divide entering E while the load/store ahead of it waits on the data bus |
 
 **SoC suite** ([`sw/tests/soc/tests.json`](../sw/tests/soc/tests.json)): C
 programs run on `anv32_soc_top` by `sim/tb/soc/tb_soc_test.sv`. Results come

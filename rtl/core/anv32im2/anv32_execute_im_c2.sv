@@ -10,6 +10,7 @@ module anv32_execute_im_c2
     input  logic               rst_i,
     input  logic               stall_i,
     input  logic               kill_i,
+    input  logic               mem_wait_i,      // M waits on the data bus with einstr_o
 
     input  dinstr_t            dinstr_e2_i,
     input  logic    [XLEN-1:0] rs1_e2_rdata_i,
@@ -257,7 +258,9 @@ module anv32_execute_im_c2
                 einstr_o.pc            <= dinstr_e2_i.pc;
                 einstr_o.instr         <= dinstr_e2_i.instr;
             end
-        end else if (md_stall) begin
+        end else if (md_stall && !mem_wait_i) begin
+            // A divide holds E2: M gets a bubble, but only once the access
+            // already in M has gone out on the bus.
             einstr_o <= '0;
         end
 

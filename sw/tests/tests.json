@@ -77,5 +77,13 @@
     "march": "rv32im_zicsr",
     "requires": ["m"],
     "max_cycles": 200000
+  },
+  {
+    "name": "div_mem_stall",
+    "src": "sw/tests/div_in_mem_stall.S",
+    "march": "rv32im_zicsr",
+    "requires": ["m"],
+    "max_cycles": 10000,
+    "mem_wait_fixed": [1, 2, 3]
   }
 ]
