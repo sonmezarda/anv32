@@ -237,6 +237,12 @@ python3 tools/run_doom_sim.py --core anv32im1 --imem-lat 20 --dmem-lat 20 \
     --lat-from-frame 1 --window 20000000
 ```
 
+`--icache-size N` puts `anv32_icache` in front of the instruction port
+(`--icache-line`, `--icache-mem-dw` and `--icache-sync-tags` set the rest). Line
+fills then come from a burst memory: the first beat `--imem-lat` cycles after
+the request, then one beat per cycle. Each cache configuration gets its own
+simulator build.
+
 ## Benchmarks
 
 ```sh
