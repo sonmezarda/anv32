@@ -20,8 +20,15 @@ make de           # decode + execute (anv32i1)
 make m            # memory stage
 make fetch_top    # fetch path through anv32i1_top
 make bus          # bus decoder, bridge and register aliases
+make icache       # instruction cache, several geometries
 make list         # list registered tests
 ```
+
+`make icache` runs `anv32_icache` with five geometries at once (both tag modes,
+32- and 64-bit line fills, 4 to 16 beats per line). A core model issues fetches
+that follow the bus protocol and a memory model answers line fills with random
+delays; every word, every line request and the hit latency are checked, and
+memory is changed and the cache invalidated now and then.
 
 `make WARN=1 <test>` shows Verilator lint warnings, and `EXTRA_VFLAGS="..."`
 passes extra flags to Verilator.
