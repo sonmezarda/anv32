@@ -173,6 +173,14 @@ def main() -> None:
     parser.add_argument("--wad", type=Path, help="doom1.wad (default: Debian shareware package)")
     parser.add_argument("--max-cycles", type=int, default=1_500_000_000)
     parser.add_argument("--max-frames", type=int, default=0)
+    parser.add_argument("--imem-lat", type=int, default=0,
+                        help="wait states before each instruction fetch is accepted")
+    parser.add_argument("--dmem-lat", type=int, default=0,
+                        help="wait states before each RAM load/store is accepted")
+    parser.add_argument("--lat-from-frame", type=int, default=0,
+                        help="turn the wait states on after this many frames")
+    parser.add_argument("--window", type=int, default=0,
+                        help="stop after this many instructions with the wait states on")
     parser.add_argument("--png", default="", help="frame numbers to save as PNG")
     parser.add_argument("--video", type=Path, help="write the frames as .mp4 or .gif")
     parser.add_argument("--out-dir", type=Path, default=Path("build/doom"))
@@ -202,6 +210,9 @@ def main() -> None:
     cmd = [sim, f"+prog={hex_file}", f"+max_cycles={args.max_cycles}", f"+frames={frames}"]
     if args.max_frames:
         cmd.append(f"+max_frames={args.max_frames}")
+    for name in ("imem_lat", "dmem_lat", "lat_from_frame", "window"):
+        if getattr(args, name):
+            cmd.append(f"+{name}={getattr(args, name)}")
     print(f"running Doom on {args.core}; console output in {log}")
     with log.open("w") as f:
         proc = subprocess.Popen([str(c) for c in cmd], cwd=out, stdout=subprocess.PIPE,

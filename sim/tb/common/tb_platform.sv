@@ -19,6 +19,13 @@
 //   +max_cycles=<n>     timeout (default 2_000_000_000)
 //   +frames=<file>      frame dump file
 //   +max_frames=<n>     stop after this many frames (default: no limit)
+//   +imem_lat=<n>       every instruction fetch waits n cycles before it is
+//                       accepted (stands in for external memory, no cache)
+//   +dmem_lat=<n>       the same for data accesses to RAM
+//   +lat_from_frame=<k> the wait states start once k frames are out, so the
+//                       start-up can run at full speed (default 0: from reset)
+//   +window=<n>         stop after n instructions have retired with the wait
+//                       states on; cycles, CPI and wait cycles are printed
 module tb_platform;
     localparam logic [31:0] RAM_BASE   = 32'h8000_0000;
     localparam int unsigned RAM_ADDR_W = 25;            // 32 MiB
@@ -37,11 +44,14 @@ module tb_platform;
 
     logic [31:0] instr_addr;
     logic [31:0] instr_rdata;
+    logic        instr_req;
+    logic        instr_ready;
     logic [31:0] mem_addr;
     logic [31:0] mem_wdata;
     logic [31:0] mem_rdata;
     logic [3:0]  mem_we;
     logic        mem_valid;
+    logic        mem_ready;
 
     always #5 clk = ~clk;
 
@@ -66,10 +76,10 @@ module tb_platform;
         .instr_valid_o(),
         .instr_i(instr_rdata),
         .instr_addr_o(instr_addr),
-        .instr_req_o(),
-        .instr_ready_i(1'b1),
+        .instr_req_o(instr_req),
+        .instr_ready_i(instr_ready),
         .mem_rdata_i(mem_rdata),
-        .mem_ready_i(1'b1),
+        .mem_ready_i(mem_ready),
         .mem_wdata_o(mem_wdata),
         .mem_addr_o(mem_addr),
         .mem_valid_o(mem_valid),
@@ -80,15 +90,19 @@ module tb_platform;
     logic [31:0] ram [0:RAM_WORDS-1];
     logic        ram_sel;
     logic        dev_sel;
+    logic        instr_fire;
+    logic        mem_fire;
 
-    assign ram_sel = mem_addr[31:RAM_ADDR_W] == RAM_BASE[31:RAM_ADDR_W];
-    assign dev_sel = mem_addr[31:28] == DEV_REGION;
+    assign ram_sel    = mem_addr[31:RAM_ADDR_W] == RAM_BASE[31:RAM_ADDR_W];
+    assign dev_sel    = mem_addr[31:28] == DEV_REGION;
+    assign instr_fire = instr_req && instr_ready;
+    assign mem_fire   = mem_valid && mem_ready;
 
     always_ff @(posedge clk) begin
         instr_rdata <= ram[instr_addr[RAM_ADDR_W-1:2]];
         mem_rdata   <= ram_sel ? ram[mem_addr[RAM_ADDR_W-1:2]] : 32'b0;
 
-        if (mem_valid && ram_sel) begin
+        if (mem_fire && ram_sel) begin
             for (int i = 0; i < 4; i++) begin
                 if (mem_we[i]) ram[mem_addr[RAM_ADDR_W-1:2]][i*8 +: 8] <= mem_wdata[i*8 +: 8];
             end
@@ -108,6 +122,45 @@ module tb_platform;
     int unsigned max_frames = 0;
     longint unsigned cycle = 0;
 
+    // ---- Memory wait states ------------------------------------------------
+    // A request waits *_lat cycles and is accepted on the next one, like a
+    // fixed-latency memory without a cache. Only RAM data accesses wait; the
+    // simulation device answers at once.
+    int unsigned imem_lat = 0;
+    int unsigned dmem_lat = 0;
+    int unsigned lat_from_frame = 0;
+    int unsigned ipend_cycles = 0;    // cycles the current request has waited
+    int unsigned dpend_cycles = 0;
+    logic        lat_on;
+
+    assign lat_on      = frame_count >= lat_from_frame;
+    assign instr_ready = !(lat_on && instr_req && ipend_cycles < imem_lat);
+    assign mem_ready   = !(lat_on && mem_valid && ram_sel && dpend_cycles < dmem_lat);
+
+    always_ff @(posedge clk) begin
+        if (!instr_req || instr_fire) ipend_cycles <= 0;
+        else                          ipend_cycles <= ipend_cycles + 1;
+        if (!mem_valid || mem_fire)   dpend_cycles <= 0;
+        else                          dpend_cycles <= dpend_cycles + 1;
+    end
+
+    // ---- Measurement window ------------------------------------------------
+    // Counted while the wait states are on.
+    longint unsigned window = 0;
+    longint unsigned win_cycles = 0;
+    longint unsigned win_instret = 0;
+    longint unsigned win_iwait = 0;   // cycles a fetch waited for memory
+    longint unsigned win_dwait = 0;   // cycles a load/store waited (pipeline stalled)
+
+    always_ff @(posedge clk) begin
+        if (!rst && lat_on) begin
+            win_cycles  <= win_cycles + 1;
+            win_instret <= win_instret + 64'(dut.csr.retire_i);
+            win_iwait   <= win_iwait + 64'(instr_req && !instr_ready);
+            win_dwait   <= win_dwait + 64'(mem_valid && !mem_ready);
+        end
+    end
+
     task automatic dump_frame(logic [31:0] fb_addr);
         $display("[platform] frame %0d at cycle %0d", frame_count, cycle);
         if (frames_fd != 0) begin
@@ -119,7 +172,7 @@ module tb_platform;
     endtask
 
     always_ff @(posedge clk) begin
-        if (!rst && mem_valid && !ram_sel) begin
+        if (!rst && mem_fire && !ram_sel) begin
             if (dev_sel && mem_we != 4'b0) begin
                 unique case (mem_addr[7:0])
                     DEV_EXIT: begin
@@ -154,14 +207,25 @@ module tb_platform;
         rst = 1'b0;
 
         void'($value$plusargs("max_frames=%d", max_frames));
+        void'($value$plusargs("imem_lat=%d", imem_lat));
+        void'($value$plusargs("dmem_lat=%d", dmem_lat));
+        void'($value$plusargs("lat_from_frame=%d", lat_from_frame));
+        void'($value$plusargs("window=%d", window));
 
-        while (!done && cycle < max_cycles && (max_frames == 0 || frame_count < max_frames)) begin
+        while (!done && cycle < max_cycles && (max_frames == 0 || frame_count < max_frames) &&
+               (window == 0 || win_instret < window)) begin
             @(posedge clk);
             cycle++;
         end
 
         if (frames_fd != 0) $fclose(frames_fd);
-        if (max_frames != 0 && frame_count >= max_frames)
+        if (win_instret != 0)
+            $display("[platform] imem_lat=%0d dmem_lat=%0d: %0d instructions, %0d cycles, CPI %0.3f, fetch wait %0d, load/store wait %0d",
+                     imem_lat, dmem_lat, win_instret, win_cycles,
+                     real'(win_cycles) / real'(win_instret), win_iwait, win_dwait);
+        if (window != 0 && win_instret >= window)
+            $display("[platform] window done after %0d cycles", cycle);
+        else if (max_frames != 0 && frame_count >= max_frames)
             $display("[platform] stopped after %0d frames, %0d cycles", frame_count, cycle);
         else if (!done)
             $display("[platform] timeout after %0d cycles", cycle);

@@ -218,6 +218,18 @@ rate in the dump is what the core would reach at that clock with
 single-cycle memory. The simulation runs at about 3 million cycles per
 second; the first frame appears after about 300 million cycles.
 
+`--imem-lat N` and `--dmem-lat N` make every instruction fetch or RAM
+load/store wait N cycles before it is accepted, which is roughly what a core
+without caches would see on external memory. `--lat-from-frame K` turns the
+wait states on only after K frames, so the start-up still runs at full speed,
+and `--window N` stops after N instructions with the wait states on and
+prints the cycles, CPI and wait cycles of that window:
+
+```sh
+python3 tools/run_doom_sim.py --core anv32im1 --imem-lat 20 --dmem-lat 20 \
+    --lat-from-frame 1 --window 20000000
+```
+
 ## Benchmarks
 
 ```sh
