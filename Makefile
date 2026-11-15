@@ -174,7 +174,7 @@ $(FETCH_TEST_LANE_HEX) &: $(FETCH_TEST_HEX_SRC) $(HEX_SPLIT)
 #            SRC_<t>  source list
 #            HEX_<t>  hex prerequisites (lane files) needed at run time, if any
 # ---------------------------------------------------------------------------
-TESTS := de m fetch_top bus icache
+TESTS := de m fetch_top bus icache dcache
 
 TOP_de := tb_de_stage
 SRC_de := \
@@ -228,6 +228,12 @@ SRC_icache := \
 	rtl/cache/anv32_icache.sv \
 	sim/tb/cache/tb_icache.sv
 HEX_icache :=
+
+TOP_dcache := tb_dcache
+SRC_dcache := \
+	rtl/cache/anv32_dcache.sv \
+	sim/tb/cache/tb_dcache.sv
+HEX_dcache :=
 
 SRC_program_fetch := \
 	$(COMMON_PKGS) \
@@ -809,6 +815,7 @@ help:
 	@echo "  make fetch_top       Run tb_fetch_stage.sv (needs lane hex)"
 	@echo "  make bus             Run tb_bus.sv (decoder, bridge, register aliases)"
 	@echo "  make icache          Run tb_icache.sv (instruction cache, several geometries)"
+	@echo "  make dcache          Run tb_dcache.sv (data cache, several geometries)"
 	@echo "  make all             Run all registered tests"
 	@echo "  make test TEST=name  Run a registered test"
 	@echo "  make hex             Generate byte-lane hex from PROG ($(PROG))"

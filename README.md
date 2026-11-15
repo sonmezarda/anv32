@@ -300,6 +300,7 @@ git config filter.gowinpath.clean "sed -E 's#path=\"[^\"]*/(rtl/[^\"]*)\"#path=\
 rtl/core/        cores: common blocks, shared pipeline stages, per-core execute/top
 rtl/peripherals/ clint, uart, i2c, gpio, sysctrl, nn_accelerator
 rtl/soc/         SoC top, bus decoder/bridge/read pipe/register front end
+rtl/cache/       instruction and data caches for external memory
 rtl/include/     ISA, config and register-map packages
 sim/tb/          Verilator testbenches
 sim/corebench/   cross-core benchmark testbench, core registry and adapters

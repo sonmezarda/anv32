@@ -21,6 +21,7 @@ make m            # memory stage
 make fetch_top    # fetch path through anv32i1_top
 make bus          # bus decoder, bridge and register aliases
 make icache       # instruction cache, several geometries
+make dcache       # data cache, several geometries
 make list         # list registered tests
 ```
 
@@ -29,6 +30,13 @@ make list         # list registered tests
 that follow the bus protocol and a memory model answers line fills with random
 delays; every word, every line request and the hit latency are checked, and
 memory is changed and the cache invalidated now and then.
+
+`make dcache` does the same for `anv32_dcache` with loads and stores of every
+width. Its memory model answers writes in order after random delays and only
+then makes them visible, so a line fill that overtakes a buffered store reads
+stale data; loads are checked against a reference memory in program order,
+the write buffer's acceptance and `drained_o` against the writes in flight,
+and at the end memory must equal the reference.
 
 `make WARN=1 <test>` shows Verilator lint warnings, and `EXTRA_VFLAGS="..."`
 passes extra flags to Verilator.
