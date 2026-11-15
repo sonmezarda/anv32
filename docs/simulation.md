@@ -22,6 +22,7 @@ make fetch_top    # fetch path through anv32i1_top
 make bus          # bus decoder, bridge and register aliases
 make icache       # instruction cache, several geometries
 make dcache       # data cache, several geometries
+make cache_axi    # both caches through the AXI3 adapter
 make list         # list registered tests
 ```
 
@@ -37,6 +38,13 @@ then makes them visible, so a line fill that overtakes a buffered store reads
 stale data; loads are checked against a reference memory in program order,
 the write buffer's acceptance and `drained_o` against the writes in flight,
 and at the end memory must equal the reference.
+
+`make cache_axi` runs both caches through `anv32_cache_axi` against
+`sim/tb/common/axi3_mem.sv`, an AXI3 memory model that takes the read
+address, write address and write data channels independently and after
+random delays, answers in order, and checks the protocol and that no read
+overlaps a write it has not answered yet. At the end of each data run the
+cache is invalidated and every word ever written is read back through AXI.
 
 `make WARN=1 <test>` shows Verilator lint warnings, and `EXTRA_VFLAGS="..."`
 passes extra flags to Verilator.
