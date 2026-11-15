@@ -55,6 +55,7 @@ passes extra flags to Verilator.
 make core-tests
 make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep,muldiv
 make core-tests TEST_SUITES=soc
+make core-tests TEST_SUITES=ext
 make core-tests TEST_SUITES=rtos
 make check        # unit tests + core/SoC/FreeRTOS tests + bootloader + riscv-tests + benchmarks
 ```
@@ -87,8 +88,15 @@ yet must not change.
 | `div_mem_stall` | a divide entering E while the load/store ahead of it waits on the data bus |
 
 **SoC suite** ([`sw/tests/soc/tests.json`](../sw/tests/soc/tests.json)): C
-programs run on `anv32_soc_top` by `sim/tb/soc/tb_soc_test.sv`. Results come
+programs run on `anv32_soc` by `sim/tb/soc/tb_soc_test.sv`. Results come
 back through the LED register; the UART TX pin is looped back to RX.
+
+**Ext suite**: the same programs, linked at `0x8000_0000`
+(`sw/common/link_ext.ld`) and run from external RAM with `HAS_EXT_RAM`, so
+every fetch, load and store goes through the caches and their AXI3 ports
+into two `axi3_mem` models. A protocol error there fails the test, and so
+does an MMIO access while a store is still in the data cache's write buffer.
+`soc_unmapped` is left out, as `0x8000_0000` is no longer unmapped.
 
 | Test                | Covers |
 | ------------------- | ------ |

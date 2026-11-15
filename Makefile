@@ -92,7 +92,7 @@ FPGA_EVAL_JOBS ?= 2
 GOWIN_SH ?= gw_sh
 VIVADO ?= vivado
 TEST_CORES ?= anv32i1,anv32im1,anv32im2
-TEST_SUITES ?= core,soc,rtos
+TEST_SUITES ?= core,soc,ext,rtos
 TEST_NAMES ?= all
 TEST_OUT_DIR ?= build/core_tests
 MUL_PIPE ?= 0
@@ -644,16 +644,20 @@ core-tests:
 boot-test:
 	$(PYTHON) tools/run_boot_test.py --cores "$(TEST_CORES)"
 
-# Elaborate anv32_soc_top in every core and with each peripheral toggled, so a
-# configuration nobody simulates still builds. Lint only; behaviour is covered
-# by core-tests (soc: every peripheral on, 4 KiB; rtos: the default build).
+# Elaborate anv32_soc in every core, with each peripheral toggled and with
+# external RAM, so a configuration nobody simulates still builds, then the
+# anv32_soc_top wrapper with its defaults. Lint only; behaviour is covered by
+# core-tests (soc: every peripheral on, 4 KiB; ext: the same from external
+# RAM; rtos: the default build).
 SOC_CONFIGS := \
 	CORE_TYPE=0 CORE_TYPE=1 CORE_TYPE=2 CORE_TYPE=2,MUL_PIPE=1 \
 	HAS_CLINT=0 HAS_GPIO=0 HAS_NN=1 HAS_I2C=0 HAS_BOOTLOADER=0 \
 	HAS_SYSCTRL=0,HAS_BOOTLOADER=0 HAS_UART=0,HAS_BOOTLOADER=0 \
 	HAS_NN=1,BRAM_ADDR_W=10 \
 	HAS_CLINT=0,HAS_GPIO=0,HAS_NN=0,HAS_SYSCTRL=0,HAS_UART=0,HAS_I2C=0,HAS_BOOTLOADER=0 \
-	MTIME_FREQ=27000000
+	MTIME_FREQ=27000000 \
+	HAS_EXT_RAM=1 HAS_EXT_RAM=1,RESET_TO_EXT=1,HAS_BOOTLOADER=0 \
+	HAS_EXT_RAM=1,CORE_TYPE=0,ICACHE_SIZE=4096,DCACHE_SIZE=16384,DCACHE_WBUF=8
 
 soc-configs:
 	@srcs="$$($(PYTHON) -c "import sys; sys.path.insert(0, 'tools'); import run_core_tests as r; print(' '.join(r.soc_sources()))")"; \
@@ -661,10 +665,14 @@ soc-configs:
 		gflags=$$(printf -- '-G%s ' $$(echo $$cfg | tr ',' ' ')); \
 		printf '  %-88s' "$$cfg"; \
 		$(VERILATOR) --lint-only -sv -Wall -Wno-fatal $(VERILATOR_WARNINGS) \
-			--top-module anv32_soc_top $$gflags $$srcs >/dev/null 2>&1 \
+			--top-module anv32_soc $$gflags $$srcs >/dev/null 2>&1 \
 			|| { echo FAIL; exit 1; }; \
 		echo ok; \
-	done
+	done; \
+	printf '  %-88s' "anv32_soc_top"; \
+	$(VERILATOR) --lint-only -sv -Wall -Wno-fatal $(VERILATOR_WARNINGS) \
+		--top-module anv32_soc_top $$srcs >/dev/null 2>&1 || { echo FAIL; exit 1; }; \
+	echo ok
 
 # Official RISC-V test suites (cloned into build/third_party on first use).
 # riscv-tests are self-checking; riscv-arch-test compares against Spike.
@@ -850,9 +858,9 @@ help:
 	@echo "  make asm-hard-test  Run the RV32I hard assembly diff suite"
 	@echo "  make core-tests     Run the self-checking core and SoC tests (sw/tests)"
 	@echo "  make core-tests TEST_CORES=anv32im2 TEST_NAMES=irq_sweep"
-	@echo "                       Select cores and tests (TEST_SUITES=core,soc,rtos)"
+	@echo "                       Select cores and tests (TEST_SUITES=core,soc,ext,rtos)"
 	@echo "  make boot-test      Run the UART bootloader test on all cores"
-	@echo "  make soc-configs    Lint anv32_soc_top in every core / peripheral configuration"
+	@echo "  make soc-configs    Lint anv32_soc in every core / peripheral / external RAM configuration"
 	@echo "  make riscv-tests    Run riscv-tests (rv32ui/um/mi) on all cores"
 	@echo "  make arch-test      Run riscv-arch-test, compared against Spike"
 	@echo "  make check          Unit + core/SoC tests + riscv-tests + benchmarks"

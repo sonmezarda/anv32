@@ -15,7 +15,7 @@ addresses assigned but no hardware behind them yet.
 | `0x1002_0000` - `0x1002_FFFF` | 64 KiB | Reserved: DMA / stream engine |
 | `0x1003_0000` - `0x100F_FFFF` | 832 KiB | Reserved accelerator apertures |
 | `0x2000_0000` - `0x2FFF_FFFF` | 256 MiB | Reserved external memory-mapped devices |
-| `0x8000_0000` - `0x8FFF_FFFF` | 256 MiB | Reserved external RAM / PSRAM / SDRAM |
+| `0x8000_0000` - `0x8FFF_FFFF` | 256 MiB | External RAM behind the instruction and data caches (`HAS_EXT_RAM`; reads as zero without it) |
 
 ## Low-Speed MMIO Slots
 
@@ -40,20 +40,30 @@ Low-speed peripherals use 4 KiB slots under `0x1000_0000`.
 Both core ports use the valid/ready protocol in `rtl/include/anv32_bus_pkg.sv`.
 A transfer happens on a cycle where both `valid` and `ready` are high, and
 read data comes back on the following cycle. In the SoC the instruction port
-goes straight to the BRAM, which is always ready; the data port goes through
+goes to the BRAM, which is always ready, or with `HAS_EXT_RAM` to the
+instruction cache for addresses in external RAM; the data port goes through
 the bus fabric below. Wait states per access:
 
 | Slaves | Write | Read |
 | --- | ---: | ---: |
 | BRAM, GPIO0 | 0 | 0 |
+| External RAM (data cache) | 0 while the write buffer has room | 0 on a hit |
 | NN accelerator, CLINT | 0 | 1 |
 | SYSCTRL, UART0, I2C0 | 1 | 2 |
 
-BRAM, GPIO0, the NN accelerator and the CLINT hang directly off the first
-address decoder. SYSCTRL, UART0 and I2C0 sit behind a register slice
+A data cache miss waits for buffered stores to be written and then for the
+line to come in over AXI. The data cache is write-through, so a store may
+still sit in its write buffer when the core moves on; an access to anything
+other than the BRAM or external RAM therefore waits until every buffered
+store is in memory, so a device, or another bus master that device signals,
+sees the data.
+
+BRAM, GPIO0, the data cache, the NN accelerator and the CLINT hang directly
+off the first address decoder. SYSCTRL, UART0 and I2C0 sit behind a register slice
 (`rtl/soc/bus/anv32_bus_bridge.sv`) and a second decoder, which costs one
 cycle per access. Each slave also declares whether its read data may reach
-the core combinationally (`bus_rsp_t.fast`): only BRAM and GPIO0 do. Every
+the core combinationally (`bus_rsp_t.fast`): only BRAM, GPIO0 and the data
+cache, which answers a hit from its block RAM, do. Every
 other read is registered at the core boundary
 (`rtl/soc/bus/anv32_bus_read_pipe.sv`), one more cycle, so slow read paths
 stay off the core's load/forwarding timing path. GPIO0 is in the MMIO block

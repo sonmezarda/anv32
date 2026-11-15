@@ -97,8 +97,11 @@ PYNQ-Z2, is in
 
 ## SoC
 
-[`rtl/soc/anv32_soc_top.sv`](rtl/soc/anv32_soc_top.sv) is the only SoC top,
-and every build option is one of its parameters:
+[`rtl/soc/anv32_soc.sv`](rtl/soc/anv32_soc.sv) is the SoC, and every build
+option is one of its parameters.
+[`rtl/soc/anv32_soc_top.sv`](rtl/soc/anv32_soc_top.sv) wraps it for the Tang
+Nano 9K, whose pins match its ports; it takes the same parameters except the
+external RAM ones, and builds without external RAM.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -111,6 +114,10 @@ and every build option is one of its parameters:
 | `HAS_NN` | `0` | Include the NN accelerator |
 | `HAS_BOOTLOADER` | `1` | UART bootloader in the top `BOOT_SIZE` (1 KiB) of the BRAM; needs UART and SYSCTRL |
 | `BOOT_BAUD` | `115_200` | Baud rate of the UART boot trigger |
+| `HAS_EXT_RAM` | `0` | External RAM at `0x8000_0000` behind an instruction and a data cache, each with an AXI3 master port (`anv32_soc` only) |
+| `RESET_TO_EXT` | `0` | Start the core at `0x8000_0000`, where another bus master has loaded the program; needs `HAS_EXT_RAM` and no bootloader |
+| `ICACHE_SIZE`, `ICACHE_LINE` | `8192`, `64` | Instruction cache size and line, in bytes |
+| `DCACHE_SIZE`, `DCACHE_LINE`, `DCACHE_WBUF` | `8192`, `32`, `4` | Data cache size and line in bytes, write buffer entries |
 
 The defaults are the FreeRTOS build for the Tang Nano 9K. The GW1NR-9 has 26
 BSRAM blocks: 32 KiB of BRAM takes 16 and the register file 2, while the NN

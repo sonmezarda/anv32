@@ -124,7 +124,7 @@ module tb_soc_boot #(
     task automatic wait_led(input logic [3:0] value, input int unsigned limit,
                             input int unsigned code);
         int unsigned waited = 0;
-        while (dut.led_reg[3:0] != value) begin
+        while (dut.soc.led_reg[3:0] != value) begin
             @(posedge clk_i);
             waited++;
             if (waited > limit) fail(code, "LED timeout");
@@ -142,30 +142,30 @@ module tb_soc_boot #(
 
         if (!$value$plusargs("boot_image=%s", boot_image)) $fatal(1, "missing +boot_image");
         if (!$value$plusargs("app=%s", app_file)) $fatal(1, "missing +app");
-        $readmemh({boot_image, "_lane0.hex"}, dut.ram.lane[0].mem);
-        $readmemh({boot_image, "_lane1.hex"}, dut.ram.lane[1].mem);
-        $readmemh({boot_image, "_lane2.hex"}, dut.ram.lane[2].mem);
-        $readmemh({boot_image, "_lane3.hex"}, dut.ram.lane[3].mem);
+        $readmemh({boot_image, "_lane0.hex"}, dut.soc.ram.lane[0].mem);
+        $readmemh({boot_image, "_lane1.hex"}, dut.soc.ram.lane[1].mem);
+        $readmemh({boot_image, "_lane2.hex"}, dut.soc.ram.lane[2].mem);
+        $readmemh({boot_image, "_lane3.hex"}, dut.soc.ram.lane[3].mem);
         fd = $fopen(app_file, "r");
         if (fd == 0) $fatal(1, "cannot open %s", app_file);
         while ($fscanf(fd, "%h", word) == 1) app.push_back(word);
         $fclose(fd);
         crc = crc32(app);
 
-        boot_word0  = {dut.ram.lane[3].mem[BOOT_WORD], dut.ram.lane[2].mem[BOOT_WORD],
-                       dut.ram.lane[1].mem[BOOT_WORD], dut.ram.lane[0].mem[BOOT_WORD]};
-        boot_word64 = {dut.ram.lane[3].mem[BOOT_WORD + 64], dut.ram.lane[2].mem[BOOT_WORD + 64],
-                       dut.ram.lane[1].mem[BOOT_WORD + 64], dut.ram.lane[0].mem[BOOT_WORD + 64]};
+        boot_word0  = {dut.soc.ram.lane[3].mem[BOOT_WORD], dut.soc.ram.lane[2].mem[BOOT_WORD],
+                       dut.soc.ram.lane[1].mem[BOOT_WORD], dut.soc.ram.lane[0].mem[BOOT_WORD]};
+        boot_word64 = {dut.soc.ram.lane[3].mem[BOOT_WORD + 64], dut.soc.ram.lane[2].mem[BOOT_WORD + 64],
+                       dut.soc.ram.lane[1].mem[BOOT_WORD + 64], dut.soc.ram.lane[0].mem[BOOT_WORD + 64]};
 
         repeat (5) @(posedge clk_i);
         rst_n_i = 1'b1;
 
         // 1. Power-on: straight to the program, no wait for the host
         wait_led(4'h3, 200, 1);
-        if ({dut.ram.lane[3].mem[BOOT_WORD], dut.ram.lane[2].mem[BOOT_WORD],
-             dut.ram.lane[1].mem[BOOT_WORD], dut.ram.lane[0].mem[BOOT_WORD]} != boot_word0 ||
-            {dut.ram.lane[3].mem[BOOT_WORD + 64], dut.ram.lane[2].mem[BOOT_WORD + 64],
-             dut.ram.lane[1].mem[BOOT_WORD + 64], dut.ram.lane[0].mem[BOOT_WORD + 64]} != boot_word64)
+        if ({dut.soc.ram.lane[3].mem[BOOT_WORD], dut.soc.ram.lane[2].mem[BOOT_WORD],
+             dut.soc.ram.lane[1].mem[BOOT_WORD], dut.soc.ram.lane[0].mem[BOOT_WORD]} != boot_word0 ||
+            {dut.soc.ram.lane[3].mem[BOOT_WORD + 64], dut.soc.ram.lane[2].mem[BOOT_WORD + 64],
+             dut.soc.ram.lane[1].mem[BOOT_WORD + 64], dut.soc.ram.lane[0].mem[BOOT_WORD + 64]} != boot_word64)
             fail(2, "a program store reached the bootloader");
         if (rx_fifo.size() != 0) fail(3, "bootloader talked on a power-on reset");
 
@@ -176,7 +176,7 @@ module tb_soc_boot #(
         send_byte(8'h1B); send_byte("A"); send_byte("N"); send_byte("V");
         send_byte("3");   send_byte("2"); send_byte("B"); send_byte("L");
         for (int i = 0; i < hello.len(); i++) expect_byte(hello[i], 10 + i);
-        if (dut.led_reg[3:0] != 4'h0) fail(4, "trigger did not reset the SoC");
+        if (dut.soc.led_reg[3:0] != 4'h0) fail(4, "trigger did not reset the SoC");
 
         // 3. Bad CRC, then a length past the bootloader
         send_byte("L"); send_word(32'(app.size() * 4)); send_word(crc ^ 32'h1);

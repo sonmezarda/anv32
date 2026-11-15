@@ -1,0 +1,841 @@
+// The SoC. Every build option is a parameter here: the core, the memory
+// size, the clock, which peripherals exist and whether external RAM sits
+// behind caches. A disabled peripheral keeps its bus slot and address range,
+// which then read as zero and ignore writes like an unmapped address, so the
+// memory map and software layout do not change between configurations.
+//
+// With HAS_EXT_RAM, EXT_RAM_BASE (256 MiB) is external memory: instruction
+// fetches there go through anv32_icache and loads/stores through
+// anv32_dcache, each with its own AXI3 master port (m_axi_i_*, read only, and
+// m_axi_d_*). ext_addr_offset_i is added to every address on those ports.
+// The data cache is write-through; an access that leaves the core's own
+// memories (anything but the BRAM and external RAM, so MMIO, the CLINT and
+// the NN accelerator) waits until every buffered store is in memory, so a
+// device or another bus master it signals sees the data. Without
+// HAS_EXT_RAM the AXI ports stay idle and the region reads as zero.
+//
+// anv32_soc_top wraps this for FPGA boards whose pins match its ports.
+module anv32_soc
+    import anv32_bus_pkg::*;
+    import anv32_soc_addr_pkg::*;
+#(
+    parameter int unsigned CORE_TYPE   = 2,           // 0 = i1, 1 = im1, 2 = im2
+    parameter bit          MUL_PIPE    = 1'b0,        // im2: two-cycle registered multiply
+    parameter int unsigned BRAM_ADDR_W = 13,
+    parameter int unsigned POR_CYCLES  = 8,
+    parameter              INIT_FILE   = "src/prog",
+    parameter int unsigned CLK_FREQ    = 27_000_000,  // Hz, for UART/I2C timing
+    parameter int unsigned MTIME_FREQ  = 1_000_000,   // Hz, CLINT mtime rate; must divide CLK_FREQ
+
+    // Peripherals
+    parameter bit HAS_CLINT   = 1'b1,
+    parameter bit HAS_GPIO    = 1'b1,
+    parameter bit HAS_NN      = 1'b0,
+    parameter bit HAS_SYSCTRL = 1'b1,
+    parameter bit HAS_UART    = 1'b1,
+    parameter bit HAS_I2C     = 1'b1,
+
+    // UART bootloader (sw/boot) in the top BOOT_SIZE bytes of the BRAM: the
+    // core resets into it, data writes cannot touch it, and the UART boot
+    // trigger resets the SoC into it. Needs HAS_UART and HAS_SYSCTRL.
+    parameter bit          HAS_BOOTLOADER = 1'b1,
+    parameter int unsigned BOOT_SIZE      = 1024,
+    parameter int unsigned BOOT_BAUD      = 115_200,
+
+    // External RAM behind the caches (see above). RESET_TO_EXT starts the
+    // core at EXT_RAM_BASE, where another bus master has put the program;
+    // it excludes the bootloader.
+    parameter bit          HAS_EXT_RAM  = 1'b0,
+    parameter bit          RESET_TO_EXT = 1'b0,
+    parameter int unsigned ICACHE_SIZE  = 8192,
+    parameter int unsigned ICACHE_LINE  = 64,
+    parameter int unsigned DCACHE_SIZE  = 8192,
+    parameter int unsigned DCACHE_LINE  = 32,
+    parameter int unsigned DCACHE_WBUF  = 4
+)(
+    input  logic        clk_i,
+    input  logic        rst_n_i,
+    input  logic        gpio_irq_i,
+    input  logic        uart_rx_i,
+    inout  logic        i2c_sda_io,
+    inout  logic        i2c_scl_io,
+    output logic        uart_tx_o,
+    output logic [3:0]  debug_leds,
+
+    input  logic [31:0] ext_addr_offset_i,
+
+    // AXI3 master of the instruction cache (reads only)
+    output logic [5:0]  m_axi_i_arid,
+    output logic [31:0] m_axi_i_araddr,
+    output logic [3:0]  m_axi_i_arlen,
+    output logic [2:0]  m_axi_i_arsize,
+    output logic [1:0]  m_axi_i_arburst,
+    output logic [1:0]  m_axi_i_arlock,
+    output logic [3:0]  m_axi_i_arcache,
+    output logic [2:0]  m_axi_i_arprot,
+    output logic [3:0]  m_axi_i_arqos,
+    output logic        m_axi_i_arvalid,
+    input  logic        m_axi_i_arready,
+    input  logic [5:0]  m_axi_i_rid,
+    input  logic [63:0] m_axi_i_rdata,
+    input  logic [1:0]  m_axi_i_rresp,
+    input  logic        m_axi_i_rlast,
+    input  logic        m_axi_i_rvalid,
+    output logic        m_axi_i_rready,
+
+    // AXI3 master of the data cache
+    output logic [5:0]  m_axi_d_arid,
+    output logic [31:0] m_axi_d_araddr,
+    output logic [3:0]  m_axi_d_arlen,
+    output logic [2:0]  m_axi_d_arsize,
+    output logic [1:0]  m_axi_d_arburst,
+    output logic [1:0]  m_axi_d_arlock,
+    output logic [3:0]  m_axi_d_arcache,
+    output logic [2:0]  m_axi_d_arprot,
+    output logic [3:0]  m_axi_d_arqos,
+    output logic        m_axi_d_arvalid,
+    input  logic        m_axi_d_arready,
+    input  logic [5:0]  m_axi_d_rid,
+    input  logic [63:0] m_axi_d_rdata,
+    input  logic [1:0]  m_axi_d_rresp,
+    input  logic        m_axi_d_rlast,
+    input  logic        m_axi_d_rvalid,
+    output logic        m_axi_d_rready,
+    output logic [5:0]  m_axi_d_awid,
+    output logic [31:0] m_axi_d_awaddr,
+    output logic [3:0]  m_axi_d_awlen,
+    output logic [2:0]  m_axi_d_awsize,
+    output logic [1:0]  m_axi_d_awburst,
+    output logic [1:0]  m_axi_d_awlock,
+    output logic [3:0]  m_axi_d_awcache,
+    output logic [2:0]  m_axi_d_awprot,
+    output logic [3:0]  m_axi_d_awqos,
+    output logic        m_axi_d_awvalid,
+    input  logic        m_axi_d_awready,
+    output logic [5:0]  m_axi_d_wid,
+    output logic [63:0] m_axi_d_wdata,
+    output logic [7:0]  m_axi_d_wstrb,
+    output logic        m_axi_d_wlast,
+    output logic        m_axi_d_wvalid,
+    input  logic        m_axi_d_wready,
+    input  logic [5:0]  m_axi_d_bid,
+    input  logic [1:0]  m_axi_d_bresp,
+    input  logic        m_axi_d_bvalid,
+    output logic        m_axi_d_bready
+);
+    localparam int unsigned CORE_ANV32I1  = 0;
+    localparam int unsigned CORE_ANV32IM1 = 1;
+    localparam int unsigned CORE_ANV32IM2 = 2;
+
+    // Fast bus: zero wait states. GPIO0 sits inside the MMIO region but comes
+    // first, so it is decoded here instead of behind the peripheral bridge.
+    localparam int unsigned FAST_GPIO   = 0;
+    localparam int unsigned FAST_BRAM   = 1;
+    localparam int unsigned FAST_NN     = 2;
+    localparam int unsigned FAST_PERIPH = 3;
+    localparam int unsigned FAST_CLINT  = 4;
+    localparam int unsigned FAST_EXT    = 5;
+    localparam int unsigned FAST_N      = 6;
+    localparam logic [FAST_N-1:0][31:0] FAST_BASE =     // index 5 .. 0
+        {EXT_RAM_BASE, CLINT_BASE, MMIO_BASE, NN_BASE, BRAM_BASE, GPIO0_BASE};
+    localparam logic [FAST_N-1:0][31:0] FAST_MASK =
+        {~(EXT_RAM_SIZE - 1), ~(CLINT_SIZE - 1), ~(MMIO_SIZE - 1), ~(NN_SIZE - 1),
+         ~(BRAM_SIZE - 1), ~(MMIO_SLOT_SIZE - 1)};
+
+    // Peripheral bus: behind a register slice, one extra cycle per access
+    localparam int unsigned PERIPH_SYSCTRL = 0;
+    localparam int unsigned PERIPH_UART    = 1;
+    localparam int unsigned PERIPH_I2C     = 2;
+    localparam int unsigned PERIPH_N       = 3;
+    localparam logic [PERIPH_N-1:0][31:0] PERIPH_BASE = // index 2 .. 0
+        {I2C0_BASE, UART0_BASE, SYSCTRL_BASE};
+    localparam logic [PERIPH_N-1:0][31:0] PERIPH_MASK = {PERIPH_N{~(MMIO_SLOT_SIZE - 1)}};
+
+    localparam int unsigned BRAM_BYTES = 4 << BRAM_ADDR_W;
+    localparam logic [31:0] BOOT_ADDR  = 32'(BRAM_BYTES - BOOT_SIZE);
+    localparam logic [31:0] RESET_PC   = RESET_TO_EXT   ? EXT_RAM_BASE :
+                                         HAS_BOOTLOADER ? BOOT_ADDR : 32'h0;
+
+    // synthesis translate_off
+    initial begin
+        if (HAS_BOOTLOADER && !(HAS_UART && HAS_SYSCTRL))
+            $fatal(1, "anv32_soc: HAS_BOOTLOADER needs HAS_UART and HAS_SYSCTRL");
+        if (HAS_BOOTLOADER && (BOOT_SIZE >= BRAM_BYTES || BOOT_SIZE % 4 != 0))
+            $fatal(1, "anv32_soc: BOOT_SIZE (%0d) does not fit the BRAM", BOOT_SIZE);
+        if (RESET_TO_EXT && (!HAS_EXT_RAM || HAS_BOOTLOADER))
+            $fatal(1, "anv32_soc: RESET_TO_EXT needs HAS_EXT_RAM and no bootloader");
+    end
+    // synthesis translate_on
+
+    logic rst_i;
+    logic [POR_CYCLES-1:0] por_shift = '0;
+    logic boot_reset;       // UART boot trigger: reset the SoC into the bootloader
+    logic boot_req;         // SYSCTRL STATUS.BOOT_REQ
+    logic boot_req_clr;
+
+    logic [31:0] instr_addr;
+    logic [31:0] instr_rdata;
+    logic        instr_req;
+    logic        instr_ready;
+    logic [31:0] bram_instr;       // BRAM port B
+
+    // Core data port
+    logic [31:0] mem_addr;
+    logic [31:0] mem_wdata;
+    logic [31:0] mem_rdata;
+    logic        mem_valid;
+    logic        mem_ready;
+    logic [3:0]  mem_we;
+
+    bus_req_t                   core_req;
+    bus_rsp_t                   core_rsp;
+    bus_req_t [FAST_N-1:0]      fast_req;
+    bus_rsp_t [FAST_N-1:0]      fast_rsp;
+    bus_req_t                   periph_req;
+    bus_rsp_t                   periph_rsp;
+    bus_req_t [PERIPH_N-1:0]    p_req;
+    bus_rsp_t [PERIPH_N-1:0]    p_rsp;
+
+    logic [BRAM_ADDR_W-1:0] imem_addr;
+    logic [BRAM_ADDR_W-1:0] dmem_addr;
+    logic [31:0]            dmem_rdata;
+    logic [3:0]             dmem_we;
+
+    logic [31:0] led_reg;
+    logic        gpio_irq_pending;
+    logic        i2c_irq;
+    logic        nn_accel_irq;
+    logic        external_irq;
+    logic        clint_timer_irq;   // MTIP
+    logic        clint_sw_irq;      // MSIP
+
+    always_ff @(posedge clk_i or negedge rst_n_i) begin
+        if (!rst_n_i)        por_shift <= '0;
+        else if (boot_reset) por_shift <= '0;
+        else                 por_shift <= {por_shift[POR_CYCLES-2:0], 1'b1};
+    end
+
+    generate
+        if (HAS_BOOTLOADER) begin : g_boot
+            anv32_boot_trigger #(
+                .CLK_FREQ(CLK_FREQ),
+                .BAUD    (BOOT_BAUD)
+            ) boot_trigger (
+                .clk_i      (clk_i),
+                .rst_n_i    (rst_n_i),
+                .rx_i       (uart_rx_i),
+                .clear_i    (boot_req_clr),
+                .reset_req_o(boot_reset),
+                .boot_req_o (boot_req)
+            );
+        end else begin : g_no_boot
+            assign boot_reset = 1'b0;
+            assign boot_req   = 1'b0;
+        end
+    endgenerate
+
+    assign rst_i        = ~por_shift[POR_CYCLES-1];
+    assign debug_leds   = ~led_reg[3:0];
+    assign external_irq = gpio_irq_pending || nn_accel_irq;
+
+    // ---- Bus fabric ---------------------------------------------------------
+    // The core's request first passes through a read-data register stage that
+    // registers slow (fast==0) peripheral reads at the boundary, keeping their
+    // read data out of the core's combinational load/forwarding path. Fast
+    // slaves (BRAM, GPIO, the data cache) and writes pass through with no added
+    // latency.
+    bus_req_t cpu_req;
+    bus_rsp_t cpu_rsp;
+
+    // An access outside the BRAM and external RAM waits for the data cache
+    // to drain (see the top of the file).
+    logic dcache_drained;
+    logic drain_wait;
+
+    assign drain_wait = !dcache_drained &&
+                        (mem_addr & ~(BRAM_SIZE - 1)) != BRAM_BASE &&
+                        (mem_addr & ~(EXT_RAM_SIZE - 1)) != EXT_RAM_BASE;
+
+    assign cpu_req.valid = mem_valid && !drain_wait;
+    assign cpu_req.addr  = mem_addr;
+    assign cpu_req.wdata = mem_wdata;
+    assign cpu_req.we    = mem_we;
+    assign mem_ready     = cpu_rsp.ready && !drain_wait;
+    assign mem_rdata     = cpu_rsp.rdata;
+
+    // Split the decoded read data into fast and slow buses by slave class. Each
+    // slave's bus_rsp_t.fast is a constant, so the per-slave routing resolves at
+    // elaboration: a slow slave's read register (e.g. NN scratch) only reaches
+    // rdata_slow, never rdata_fast, so the read pipe can register it away from
+    // the core's combinational load path. rd_sel/rd_hit name the slave that
+    // owns the read data this cycle.
+    logic                            rd_hit;
+    logic [$clog2(FAST_N)-1:0]       rd_sel;
+    logic [31:0]                     rdata_fast;
+    logic [31:0]                     rdata_slow;
+
+    always_comb begin
+        rdata_fast = 32'b0;
+        rdata_slow = 32'b0;
+        if (rd_hit) begin
+            for (int unsigned i = 0; i < FAST_N; i++) begin
+                if (rd_sel == i[$clog2(FAST_N)-1:0]) begin
+                    if (fast_rsp[i].fast) rdata_fast = fast_rsp[i].rdata;
+                    else                  rdata_slow = fast_rsp[i].rdata;
+                end
+            end
+        end
+    end
+
+    anv32_bus_read_pipe read_pipe (
+        .clk_i       (clk_i),
+        .rst_i       (rst_i),
+        .m_req_i     (cpu_req),
+        .m_rsp_o     (cpu_rsp),
+        .s_req_o     (core_req),
+        .s_rsp_i     (core_rsp),
+        .rdata_fast_i(rdata_fast),
+        .rdata_slow_i(rdata_slow)
+    );
+
+    anv32_bus_decoder #(
+        .N   (FAST_N),
+        .BASE(FAST_BASE),
+        .MASK(FAST_MASK)
+    ) fast_bus (
+        .clk_i  (clk_i),
+        .rst_i  (rst_i),
+        .m_req_i(core_req),
+        .m_rsp_o(core_rsp),
+        .s_req_o(fast_req),
+        .s_rsp_i(fast_rsp),
+        .rd_hit_o(rd_hit),
+        .rd_sel_o(rd_sel)
+    );
+
+    anv32_bus_bridge periph_bridge (
+        .clk_i  (clk_i),
+        .rst_i  (rst_i),
+        .m_req_i(fast_req[FAST_PERIPH]),
+        .m_rsp_o(fast_rsp[FAST_PERIPH]),
+        .s_req_o(periph_req),
+        .s_rsp_i(periph_rsp)
+    );
+
+    anv32_bus_decoder #(
+        .N   (PERIPH_N),
+        .BASE(PERIPH_BASE),
+        .MASK(PERIPH_MASK)
+    ) periph_bus (
+        .clk_i  (clk_i),
+        .rst_i  (rst_i),
+        .m_req_i (periph_req),
+        .m_rsp_o (periph_rsp),
+        .s_req_o (p_req),
+        .s_rsp_i (p_rsp),
+        .rd_hit_o(),            // only the fast bus splits read data by slave
+        .rd_sel_o()
+    );
+
+    // ---- Fast slaves ----------------------------------------------------------
+    // BRAM: synchronous read, so read data already arrives one cycle later.
+    // Only the low BRAM_ADDR_W bits decode; the rest of the region wraps.
+    // Writes into the bootloader at the top are dropped.
+    logic dmem_boot_hit;
+
+    assign dmem_addr           = fast_req[FAST_BRAM].addr[BRAM_ADDR_W+1:2];
+    assign dmem_boot_hit       = HAS_BOOTLOADER &&
+                                 ({dmem_addr, 2'b00} >= BOOT_ADDR[BRAM_ADDR_W+1:0]);
+    assign dmem_we             = (fast_req[FAST_BRAM].valid && !dmem_boot_hit) ?
+                                 fast_req[FAST_BRAM].we : 4'b0;
+    assign fast_rsp[FAST_BRAM] = '{ready: 1'b1, fast: 1'b1, rdata: dmem_rdata};
+    assign imem_addr           = instr_addr[BRAM_ADDR_W+1:2];
+
+    // ---- External RAM -----------------------------------------------------
+    // Fetches from EXT_RAM_BASE go to the instruction cache, everything else
+    // to the BRAM, which is always ready. The read data comes a cycle after
+    // the request is taken, so the choice is registered.
+    logic instr_ext;
+    logic instr_ext_q;
+
+    assign instr_ext = HAS_EXT_RAM && (instr_addr & ~(EXT_RAM_SIZE - 1)) == EXT_RAM_BASE;
+
+    always_ff @(posedge clk_i) instr_ext_q <= instr_ext;
+
+    generate
+        if (HAS_EXT_RAM) begin : g_ext_ram
+            localparam int unsigned I_BEATS = ICACHE_LINE / 8;
+            localparam int unsigned D_BEATS = DCACHE_LINE / 8;
+
+            logic        ic_ready;
+            logic [31:0] ic_rdata;
+            logic        ic_rd_valid, ic_rd_ready, ic_rvalid;
+            logic [31:0] ic_rd_addr;
+            logic [63:0] ic_rbeat;
+            logic        dc_rd_valid, dc_rd_ready, dc_rvalid;
+            logic [31:0] dc_rd_addr;
+            logic [63:0] dc_rbeat;
+            logic        dc_wr_valid, dc_wr_ready, dc_wr_done;
+            logic [31:0] dc_wr_addr;
+            logic [63:0] dc_wr_data;
+            logic [7:0]  dc_wr_strb;
+
+            assign instr_ready = instr_ext ? ic_ready : 1'b1;
+            assign instr_rdata = instr_ext_q ? ic_rdata : bram_instr;
+
+            // FENCE.I is not implemented, so nothing invalidates the caches yet
+            anv32_icache #(
+                .SIZE_BYTES(ICACHE_SIZE),
+                .LINE_BYTES(ICACHE_LINE),
+                .MEM_DW    (64),
+                .SYNC_TAGS (1'b0)
+            ) icache (
+                .clk_i          (clk_i),
+                .rst_i          (rst_i),
+                .invalidate_i   (1'b0),
+                .req_valid_i    (instr_req && instr_ext),
+                .req_addr_i     (instr_addr),
+                .req_ready_o    (ic_ready),
+                .rdata_o        (ic_rdata),
+                .mem_req_valid_o(ic_rd_valid),
+                .mem_req_ready_i(ic_rd_ready),
+                .mem_req_addr_o (ic_rd_addr),
+                .mem_rvalid_i   (ic_rvalid),
+                .mem_rdata_i    (ic_rbeat)
+            );
+
+            anv32_cache_axi #(.MEM_DW(64), .BEATS(I_BEATS), .ID_W(6), .ID(6'd0), .HAS_WRITE(1'b0)) icache_axi (
+                .clk_i        (clk_i),
+                .rst_i        (rst_i),
+                .addr_offset_i(ext_addr_offset_i),
+                .rd_valid_i   (ic_rd_valid),
+                .rd_ready_o   (ic_rd_ready),
+                .rd_addr_i    (ic_rd_addr),
+                .rvalid_o     (ic_rvalid),
+                .rdata_o      (ic_rbeat),
+                .wr_valid_i   (1'b0),
+                .wr_ready_o   (),
+                .wr_addr_i    (32'b0),
+                .wr_data_i    (64'b0),
+                .wr_strb_i    (8'b0),
+                .wr_done_o    (),
+                .m_axi_arid   (m_axi_i_arid),
+                .m_axi_araddr (m_axi_i_araddr),
+                .m_axi_arlen  (m_axi_i_arlen),
+                .m_axi_arsize (m_axi_i_arsize),
+                .m_axi_arburst(m_axi_i_arburst),
+                .m_axi_arlock (m_axi_i_arlock),
+                .m_axi_arcache(m_axi_i_arcache),
+                .m_axi_arprot (m_axi_i_arprot),
+                .m_axi_arqos  (m_axi_i_arqos),
+                .m_axi_arvalid(m_axi_i_arvalid),
+                .m_axi_arready(m_axi_i_arready),
+                .m_axi_rid    (m_axi_i_rid),
+                .m_axi_rdata  (m_axi_i_rdata),
+                .m_axi_rresp  (m_axi_i_rresp),
+                .m_axi_rlast  (m_axi_i_rlast),
+                .m_axi_rvalid (m_axi_i_rvalid),
+                .m_axi_rready (m_axi_i_rready),
+                .m_axi_awid   (),
+                .m_axi_awaddr (),
+                .m_axi_awlen  (),
+                .m_axi_awsize (),
+                .m_axi_awburst(),
+                .m_axi_awlock (),
+                .m_axi_awcache(),
+                .m_axi_awprot (),
+                .m_axi_awqos  (),
+                .m_axi_awvalid(),
+                .m_axi_awready(1'b0),
+                .m_axi_wid    (),
+                .m_axi_wdata  (),
+                .m_axi_wstrb  (),
+                .m_axi_wlast  (),
+                .m_axi_wvalid (),
+                .m_axi_wready (1'b0),
+                .m_axi_bid    (6'd0),
+                .m_axi_bresp  (2'b00),
+                .m_axi_bvalid (1'b0),
+                .m_axi_bready ()
+            );
+
+            // The data cache answers hits from its block RAM like the BRAM
+            // does, so it is a fast slave.
+            anv32_dcache #(
+                .SIZE_BYTES(DCACHE_SIZE),
+                .LINE_BYTES(DCACHE_LINE),
+                .MEM_DW    (64),
+                .WBUF_DEPTH(DCACHE_WBUF)
+            ) dcache (
+                .clk_i         (clk_i),
+                .rst_i         (rst_i),
+                .invalidate_i  (1'b0),
+                .drained_o     (dcache_drained),
+                .req_valid_i   (fast_req[FAST_EXT].valid),
+                .req_addr_i    (fast_req[FAST_EXT].addr),
+                .req_wdata_i   (fast_req[FAST_EXT].wdata),
+                .req_we_i      (fast_req[FAST_EXT].we),
+                .req_ready_o   (fast_rsp[FAST_EXT].ready),
+                .rdata_o       (fast_rsp[FAST_EXT].rdata),
+                .mem_rd_valid_o(dc_rd_valid),
+                .mem_rd_ready_i(dc_rd_ready),
+                .mem_rd_addr_o (dc_rd_addr),
+                .mem_rvalid_i  (dc_rvalid),
+                .mem_rdata_i   (dc_rbeat),
+                .mem_wr_valid_o(dc_wr_valid),
+                .mem_wr_ready_i(dc_wr_ready),
+                .mem_wr_addr_o (dc_wr_addr),
+                .mem_wr_data_o (dc_wr_data),
+                .mem_wr_strb_o (dc_wr_strb),
+                .mem_wr_done_i (dc_wr_done)
+            );
+            assign fast_rsp[FAST_EXT].fast = 1'b1;
+
+            anv32_cache_axi #(.MEM_DW(64), .BEATS(D_BEATS), .ID_W(6), .ID(6'd1), .HAS_WRITE(1'b1)) dcache_axi (
+                .clk_i        (clk_i),
+                .rst_i        (rst_i),
+                .addr_offset_i(ext_addr_offset_i),
+                .rd_valid_i   (dc_rd_valid),
+                .rd_ready_o   (dc_rd_ready),
+                .rd_addr_i    (dc_rd_addr),
+                .rvalid_o     (dc_rvalid),
+                .rdata_o      (dc_rbeat),
+                .wr_valid_i   (dc_wr_valid),
+                .wr_ready_o   (dc_wr_ready),
+                .wr_addr_i    (dc_wr_addr),
+                .wr_data_i    (dc_wr_data),
+                .wr_strb_i    (dc_wr_strb),
+                .wr_done_o    (dc_wr_done),
+                .m_axi_arid   (m_axi_d_arid),
+                .m_axi_araddr (m_axi_d_araddr),
+                .m_axi_arlen  (m_axi_d_arlen),
+                .m_axi_arsize (m_axi_d_arsize),
+                .m_axi_arburst(m_axi_d_arburst),
+                .m_axi_arlock (m_axi_d_arlock),
+                .m_axi_arcache(m_axi_d_arcache),
+                .m_axi_arprot (m_axi_d_arprot),
+                .m_axi_arqos  (m_axi_d_arqos),
+                .m_axi_arvalid(m_axi_d_arvalid),
+                .m_axi_arready(m_axi_d_arready),
+                .m_axi_rid    (m_axi_d_rid),
+                .m_axi_rdata  (m_axi_d_rdata),
+                .m_axi_rresp  (m_axi_d_rresp),
+                .m_axi_rlast  (m_axi_d_rlast),
+                .m_axi_rvalid (m_axi_d_rvalid),
+                .m_axi_rready (m_axi_d_rready),
+                .m_axi_awid   (m_axi_d_awid),
+                .m_axi_awaddr (m_axi_d_awaddr),
+                .m_axi_awlen  (m_axi_d_awlen),
+                .m_axi_awsize (m_axi_d_awsize),
+                .m_axi_awburst(m_axi_d_awburst),
+                .m_axi_awlock (m_axi_d_awlock),
+                .m_axi_awcache(m_axi_d_awcache),
+                .m_axi_awprot (m_axi_d_awprot),
+                .m_axi_awqos  (m_axi_d_awqos),
+                .m_axi_awvalid(m_axi_d_awvalid),
+                .m_axi_awready(m_axi_d_awready),
+                .m_axi_wid    (m_axi_d_wid),
+                .m_axi_wdata  (m_axi_d_wdata),
+                .m_axi_wstrb  (m_axi_d_wstrb),
+                .m_axi_wlast  (m_axi_d_wlast),
+                .m_axi_wvalid (m_axi_d_wvalid),
+                .m_axi_wready (m_axi_d_wready),
+                .m_axi_bid    (m_axi_d_bid),
+                .m_axi_bresp  (m_axi_d_bresp),
+                .m_axi_bvalid (m_axi_d_bvalid),
+                .m_axi_bready (m_axi_d_bready)
+            );
+        end else begin : g_no_ext_ram
+            assign instr_ready        = 1'b1;
+            assign instr_rdata        = bram_instr;
+            assign dcache_drained     = 1'b1;
+            assign fast_rsp[FAST_EXT] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+
+            assign m_axi_i_arid    = '0;
+            assign m_axi_i_araddr  = '0;
+            assign m_axi_i_arlen   = '0;
+            assign m_axi_i_arsize  = '0;
+            assign m_axi_i_arburst = '0;
+            assign m_axi_i_arlock  = '0;
+            assign m_axi_i_arcache = '0;
+            assign m_axi_i_arprot  = '0;
+            assign m_axi_i_arqos   = '0;
+            assign m_axi_i_arvalid = 1'b0;
+            assign m_axi_i_rready  = 1'b1;
+            assign m_axi_d_arid    = '0;
+            assign m_axi_d_araddr  = '0;
+            assign m_axi_d_arlen   = '0;
+            assign m_axi_d_arsize  = '0;
+            assign m_axi_d_arburst = '0;
+            assign m_axi_d_arlock  = '0;
+            assign m_axi_d_arcache = '0;
+            assign m_axi_d_arprot  = '0;
+            assign m_axi_d_arqos   = '0;
+            assign m_axi_d_arvalid = 1'b0;
+            assign m_axi_d_rready  = 1'b1;
+            assign m_axi_d_awid    = '0;
+            assign m_axi_d_awaddr  = '0;
+            assign m_axi_d_awlen   = '0;
+            assign m_axi_d_awsize  = '0;
+            assign m_axi_d_awburst = '0;
+            assign m_axi_d_awlock  = '0;
+            assign m_axi_d_awcache = '0;
+            assign m_axi_d_awprot  = '0;
+            assign m_axi_d_awqos   = '0;
+            assign m_axi_d_awvalid = 1'b0;
+            assign m_axi_d_wid     = '0;
+            assign m_axi_d_wdata   = '0;
+            assign m_axi_d_wstrb   = '0;
+            assign m_axi_d_wlast   = 1'b0;
+            assign m_axi_d_wvalid  = 1'b0;
+            assign m_axi_d_bready  = 1'b1;
+        end
+    endgenerate
+
+    // CLINT: machine timer and software interrupt, wired straight to the core
+    // (not through the external interrupt line).
+    generate
+        if (HAS_CLINT) begin : g_clint
+            anv32_clint #(
+                .CLK_FREQ  (CLK_FREQ),
+                .MTIME_FREQ(MTIME_FREQ)
+            ) clint (
+                .clk_i      (clk_i),
+                .rst_i      (rst_i),
+                .req_i      (fast_req[FAST_CLINT]),
+                .rsp_o      (fast_rsp[FAST_CLINT]),
+                .timer_irq_o(clint_timer_irq),
+                .sw_irq_o   (clint_sw_irq)
+            );
+        end else begin : g_no_clint
+            assign fast_rsp[FAST_CLINT] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign clint_timer_irq      = 1'b0;
+            assign clint_sw_irq         = 1'b0;
+        end
+    endgenerate
+
+    generate
+        if (HAS_GPIO) begin : g_gpio
+            gpio_periph gpio (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .req_i(fast_req[FAST_GPIO]),
+                .rsp_o(fast_rsp[FAST_GPIO]),
+                .irq_i(gpio_irq_i),
+                .irq_o(gpio_irq_pending)
+            );
+        end else begin : g_no_gpio
+            assign fast_rsp[FAST_GPIO] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign gpio_irq_pending    = 1'b0;
+        end
+    endgenerate
+
+    // NN accelerator. Register reads are registered here so they arrive one
+    // cycle later like every other slave; scratch reads come straight from
+    // the scratch BRAM, which is already registered. Parts of the aperture
+    // the accelerator does not decode are accepted and read as zero.
+    generate
+        if (HAS_NN) begin : g_nn
+            logic        nn_accel_hit;
+            logic        nn_accel_ready;
+            logic [31:0] nn_accel_rdata;
+            logic [31:0] nn_rdata_q;
+            logic        nn_scratch_sel;
+            logic        nn_scratch_sel_q;
+            logic [31:0] nn_scratch_rdata;
+
+            nn_accel_periph #(
+                .BASE_ADDR(NN_BASE),
+                .SCRATCH_OFFSET(NN_SCRATCH_BASE - NN_BASE),
+                .SCRATCH_WORDS(4096)
+            ) nn_accel (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .mem_valid_i(fast_req[FAST_NN].valid),
+                .mem_addr_i(fast_req[FAST_NN].addr),
+                .mem_wdata_i(fast_req[FAST_NN].wdata),
+                .mem_we_i(fast_req[FAST_NN].we),
+                .mem_ready_o(nn_accel_ready),
+                .mem_rdata_o(nn_accel_rdata),
+                .mem_hit_o(nn_accel_hit),
+                .scratch_rdata_o(nn_scratch_rdata),
+                .scratch_sel_o(nn_scratch_sel),
+                .irq_o(nn_accel_irq)
+            );
+
+            always_ff @(posedge clk_i) begin
+                if (rst_i) begin
+                    nn_scratch_sel_q <= 1'b0;
+                    nn_rdata_q       <= '0;
+                end else begin
+                    nn_scratch_sel_q <= nn_scratch_sel;
+                    if (fast_req[FAST_NN].valid) nn_rdata_q <= nn_accel_hit ? nn_accel_rdata : '0;
+                end
+            end
+
+            assign fast_rsp[FAST_NN].ready = nn_accel_hit ? nn_accel_ready : 1'b1;
+            assign fast_rsp[FAST_NN].fast  = 1'b0;   // slow: registered at the core boundary
+            assign fast_rsp[FAST_NN].rdata = nn_scratch_sel_q ? nn_scratch_rdata : nn_rdata_q;
+        end else begin : g_no_nn
+            assign fast_rsp[FAST_NN] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign nn_accel_irq      = 1'b0;
+        end
+    endgenerate
+
+    // ---- Peripheral slaves --------------------------------------------------
+    generate
+        if (HAS_SYSCTRL) begin : g_sysctrl
+            sysctrl_periph sysctrl (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .req_i(p_req[PERIPH_SYSCTRL]),
+                .rsp_o(p_rsp[PERIPH_SYSCTRL]),
+                .led_o(led_reg),
+                .boot_req_i(boot_req),
+                .boot_req_clr_o(boot_req_clr)
+            );
+        end else begin : g_no_sysctrl
+            assign p_rsp[PERIPH_SYSCTRL] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign led_reg               = '0;   // LEDs stay off
+            assign boot_req_clr          = 1'b0;
+        end
+
+        if (HAS_UART) begin : g_uart
+            uart_periph #(
+                .CLK_FREQ(CLK_FREQ)
+            ) uart (
+                .clk_i    (clk_i),
+                .rst_i    (rst_i),
+                .req_i    (p_req[PERIPH_UART]),
+                .rsp_o    (p_rsp[PERIPH_UART]),
+                .uart_rx_i(uart_rx_i),
+                .uart_tx_o(uart_tx_o)
+            );
+        end else begin : g_no_uart
+            assign p_rsp[PERIPH_UART] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign uart_tx_o          = 1'b1;   // line idles high
+        end
+
+        if (HAS_I2C) begin : g_i2c
+            // SCL period = 2 * 135 cycles = 100 kHz at 27 MHz; scale with CLK_FREQ.
+            localparam int unsigned SCL_HALF = CLK_FREQ / 200_000;
+
+            i2c_periph #(
+                .CLK_FREQ(CLK_FREQ),
+                .CMD_FIFO_DEPTH(16),
+                .RX_FIFO_DEPTH(8),
+                .SCL_LOW_CYCLES(SCL_HALF),
+                .SCL_HIGH_CYCLES(SCL_HALF),
+                .STRETCH_TIMEOUT_CYCLES(CLK_FREQ / 100)   // 10 ms
+            ) i2c (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .req_i(p_req[PERIPH_I2C]),
+                .rsp_o(p_rsp[PERIPH_I2C]),
+                .sda_io(i2c_sda_io),
+                .scl_io(i2c_scl_io),
+                .irq_o(i2c_irq)
+            );
+        end else begin : g_no_i2c
+            assign p_rsp[PERIPH_I2C] = '{ready: 1'b1, fast: 1'b1, rdata: 32'b0};   // absent: reads as zero
+            assign i2c_irq           = 1'b0;
+            assign i2c_sda_io        = 1'bz;    // released; external pull-ups hold the bus idle
+            assign i2c_scl_io        = 1'bz;
+        end
+    endgenerate
+
+    // ---- Core -----------------------------------------------------------------
+    generate
+        if (CORE_TYPE == CORE_ANV32I1) begin : g_core_i1
+            anv32i1_top #(.PC_RESET_VALUE(RESET_PC)) core (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .stall_i(1'b0),
+                .pc_jmp_en_i(1'b0),
+                .pc_jmp_addr_i(32'b0),
+                .ext_irq_i(external_irq),
+                .timer_irq_i(clint_timer_irq),
+                .sw_irq_i(clint_sw_irq),
+                .instr_o(),
+                .pc_o(),
+                .instr_valid_o(),
+                .instr_i(instr_rdata),
+                .instr_addr_o(instr_addr),
+                .instr_req_o(instr_req),
+                .instr_ready_i(instr_ready),
+                .mem_rdata_i(mem_rdata),
+                .mem_ready_i(mem_ready),
+                .mem_wdata_o(mem_wdata),
+                .mem_addr_o(mem_addr),
+                .mem_valid_o(mem_valid),
+                .mem_we(mem_we)
+            );
+        end else if (CORE_TYPE == CORE_ANV32IM1) begin : g_core_im1
+            anv32im1_top #(.HAS_M(1'b1), .PC_RESET_VALUE(RESET_PC)) core (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .stall_i(1'b0),
+                .pc_jmp_en_i(1'b0),
+                .pc_jmp_addr_i(32'b0),
+                .ext_irq_i(external_irq),
+                .timer_irq_i(clint_timer_irq),
+                .sw_irq_i(clint_sw_irq),
+                .instr_o(),
+                .pc_o(),
+                .instr_valid_o(),
+                .instr_i(instr_rdata),
+                .instr_addr_o(instr_addr),
+                .instr_req_o(instr_req),
+                .instr_ready_i(instr_ready),
+                .mem_rdata_i(mem_rdata),
+                .mem_ready_i(mem_ready),
+                .mem_wdata_o(mem_wdata),
+                .mem_addr_o(mem_addr),
+                .mem_valid_o(mem_valid),
+                .mem_we(mem_we)
+            );
+        end else begin : g_core_im2
+            anv32im2_top #(.HAS_M(1'b1), .MUL_PIPE(MUL_PIPE), .PC_RESET_VALUE(RESET_PC)) core (
+                .clk_i(clk_i),
+                .rst_i(rst_i),
+                .stall_i(1'b0),
+                .pc_jmp_en_i(1'b0),
+                .pc_jmp_addr_i(32'b0),
+                .ext_irq_i(external_irq),
+                .timer_irq_i(clint_timer_irq),
+                .sw_irq_i(clint_sw_irq),
+                .instr_o(),
+                .pc_o(),
+                .instr_valid_o(),
+                .instr_i(instr_rdata),
+                .instr_addr_o(instr_addr),
+                .instr_req_o(instr_req),
+                .instr_ready_i(instr_ready),
+                .mem_rdata_i(mem_rdata),
+                .mem_ready_i(mem_ready),
+                .mem_wdata_o(mem_wdata),
+                .mem_addr_o(mem_addr),
+                .mem_valid_o(mem_valid),
+                .mem_we(mem_we)
+            );
+        end
+    endgenerate
+
+    anv32_bram_tdp #(
+        .ADDR_W(BRAM_ADDR_W),
+        .INIT_FILE(INIT_FILE)
+    ) ram (
+        .clk(clk_i),
+
+        .addr_a(dmem_addr),
+        .wdata_a(fast_req[FAST_BRAM].wdata),
+        .we_a(dmem_we),
+        .rdata_a(dmem_rdata),
+
+        .addr_b(imem_addr),
+        .wdata_b(32'b0),
+        .we_b(4'b0),
+        .rdata_b(bram_instr)
+    );
+
+endmodule

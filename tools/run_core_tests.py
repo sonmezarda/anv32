@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Build and run the self-checking tests in sw/tests on every core.
 
-Three suites:
+Four suites:
   core  assembly tests on the bare core (sim/tb/common/tb_core_test.sv)
   soc   C tests on the full SoC (sim/tb/soc/tb_soc_test.sv)
+  ext   the same C tests linked at 0x80000000 (sw/common/link_ext.ld) and run
+        from external RAM behind the caches and AXI (HAS_EXT_RAM); a test
+        that lists "ext" under "skip_suites" is left out
   rtos  FreeRTOS programs on the SoC with 32 KiB of BRAM and no NN accelerator
         (the default FPGA build); kernel in third_party/FreeRTOS-Kernel
 """
@@ -25,8 +28,12 @@ CORE_TYPES = {"anv32i1": 0, "anv32im1": 1, "anv32im2": 2}
 # tb_soc_test parameters per SoC suite
 SOC_SUITE_PARAMS = {
     "soc": [],
+    "ext": ["-GHAS_EXT_RAM=1"],
     "rtos": ["-GBRAM_ADDR_W=13", "-GHAS_NN=0"],
 }
+
+# Linker script per suite where it is not --linker
+SUITE_LINKER = {"ext": "sw/common/link_ext.ld"}
 
 # tb_core_test puts the real CLINT next to the bare core
 CORE_TB_SOURCES = [
@@ -64,6 +71,10 @@ SOC_SOURCES = [
     "rtl/peripherals/nn_accelerator/dense_layer_engine.sv",
     "rtl/peripherals/nn_accelerator/nn_accel_periph.sv",
     "rtl/soc/anv32_boot_trigger.sv",
+    "rtl/cache/anv32_icache.sv",
+    "rtl/cache/anv32_dcache.sv",
+    "rtl/cache/anv32_cache_axi.sv",
+    "rtl/soc/anv32_soc.sv",
     "rtl/soc/anv32_soc_top.sv",
 ]
 
@@ -78,9 +89,10 @@ def load_tests(path: Path) -> list[dict]:
     return tests
 
 
-def build_program(args: argparse.Namespace, repo: Path, test: dict, out_dir: Path) -> Path:
+def build_program(args: argparse.Namespace, repo: Path, test: dict, out_dir: Path,
+                  suite: str = "") -> Path:
     """Build a test image and return its base path (without .hex)."""
-    prog_dir = out_dir / "programs" / test["name"]
+    prog_dir = out_dir / "programs" / (f"{suite}_{test['name']}" if suite in SUITE_LINKER else test["name"])
     prog_dir.mkdir(parents=True, exist_ok=True)
     is_c = test["src"].endswith(".c")
     run(
@@ -90,7 +102,7 @@ def build_program(args: argparse.Namespace, repo: Path, test: dict, out_dir: Pat
             "--src", test["src"],
             "--out-dir", str(prog_dir),
             "--name", test["name"],
-            "--linker", args.linker,
+            "--linker", SUITE_LINKER.get(suite, args.linker),
             "--cc", args.cc,
             "--march", test.get("march", "rv32i_zicsr"),
             "--mabi", args.mabi,
@@ -122,7 +134,7 @@ def build_tb(args: argparse.Namespace, repo: Path, suite: str, core: str, out_di
     if suite in SOC_SUITE_PARAMS:
         top = "tb_soc_test"
         design = [f"-GCORE_TYPE={CORE_TYPES[core]}", *SOC_SUITE_PARAMS[suite],
-                  *soc_sources(), "sim/tb/soc/tb_soc_test.sv"]
+                  *soc_sources(), "sim/tb/common/axi3_mem.sv", "sim/tb/soc/tb_soc_test.sv"]
         if args.mul_pipe:
             design.insert(0, "-GMUL_PIPE=1")
     else:
@@ -172,7 +184,7 @@ def run_test(args: argparse.Namespace, repo: Path, sim: Path, prog: Path, test: 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cores", default="anv32i1,anv32im1,anv32im2")
-    parser.add_argument("--suites", default="core,soc,rtos")
+    parser.add_argument("--suites", default="core,soc,ext,rtos")
     parser.add_argument("--tests", default="all")
     parser.add_argument("--core-test-list", default="sw/tests/tests.json")
     parser.add_argument("--soc-test-list", default="sw/tests/soc/tests.json")
@@ -202,12 +214,13 @@ def main() -> int:
 
     suites = parse_csv(args.suites)
     lists = {"core": Path(args.core_test_list), "soc": Path(args.soc_test_list),
-             "rtos": Path(args.rtos_test_list)}
+             "ext": Path(args.soc_test_list), "rtos": Path(args.rtos_test_list)}
     unknown = sorted(set(suites) - set(lists))
     if unknown:
         raise SystemExit(f"unknown suite(s): {', '.join(unknown)}")
 
-    tests = {suite: load_tests(lists[suite]) for suite in suites}
+    tests = {suite: [t for t in load_tests(lists[suite]) if suite not in t.get("skip_suites", [])]
+             for suite in suites}
     if args.tests != "all":
         wanted = set(parse_csv(args.tests))
         missing = wanted - {t["name"] for suite_tests in tests.values() for t in suite_tests}
@@ -215,7 +228,8 @@ def main() -> int:
             raise SystemExit(f"unknown test(s): {', '.join(sorted(missing))}")
         tests = {suite: [t for t in suite_tests if t["name"] in wanted] for suite, suite_tests in tests.items()}
 
-    images = {t["name"]: build_program(args, repo, t, out_dir) for suite_tests in tests.values() for t in suite_tests}
+    images = {(suite, t["name"]): build_program(args, repo, t, out_dir, suite)
+              for suite, suite_tests in tests.items() for t in suite_tests}
 
     results = []
     for suite in suites:
@@ -228,7 +242,7 @@ def main() -> int:
             for test in tests[suite]:
                 if not set(test["requires"]).issubset(CORE_FEATURES[core]):
                     continue
-                prog = images[test["name"]]
+                prog = images[(suite, test["name"])]
                 if suite == "core":
                     prog = prog.with_suffix(".hex")
                 # A test can also ask for fixed wait states on every access, so a
@@ -236,19 +250,19 @@ def main() -> int:
                 variants = [False] + ([True, *test.get("mem_wait_fixed", [])] if waits else [])
                 for mem_wait in variants:
                     result = run_test(args, repo, sim, prog, test, mem_wait)
-                    result.update({"test": test["name"], "core": core, "mem_wait": mem_wait})
+                    result.update({"suite": suite, "test": test["name"], "core": core, "mem_wait": mem_wait})
                     results.append(result)
                     if result["status"] == "ERROR":
                         print(result["output"], end="")
 
     print()
-    print(f"{'test':<18} {'core':<9} {'wait':<5} {'status':<8} {'code':>4} {'cycles':>7}")
-    print(f"{'-' * 18} {'-' * 9} {'-' * 5} {'-' * 8} {'-' * 4} {'-' * 7}")
+    print(f"{'suite':<5} {'test':<18} {'core':<9} {'wait':<5} {'status':<8} {'code':>4} {'cycles':>7}")
+    print(f"{'-' * 5} {'-' * 18} {'-' * 9} {'-' * 5} {'-' * 8} {'-' * 4} {'-' * 7}")
     for r in results:
         code = "" if r["status"] == "PASS" else str(r["code"])
         mw = r["mem_wait"]
         wait = ("yes" if mw else "") if isinstance(mw, bool) else f"={mw}"
-        print(f"{r['test']:<18} {r['core']:<9} {wait:<5} "
+        print(f"{r['suite']:<5} {r['test']:<18} {r['core']:<9} {wait:<5} "
               f"{r['status']:<8} {code:>4} {r['cycles']:>7}")
 
     failed = [r for r in results if r["status"] != "PASS"]
