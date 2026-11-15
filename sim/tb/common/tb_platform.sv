@@ -33,7 +33,7 @@
 // instruction port.
 module tb_platform #(
     parameter int unsigned ICACHE_SIZE      = 0,     // bytes; 0 = no instruction cache
-    parameter int unsigned ICACHE_LINE      = 32,
+    parameter int unsigned ICACHE_LINE      = 64,
     parameter int unsigned ICACHE_MEM_DW    = 64,
     parameter bit          ICACHE_SYNC_TAGS = 1'b0
 );

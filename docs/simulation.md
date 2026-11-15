@@ -231,11 +231,19 @@ load/store wait N cycles before it is accepted, which is roughly what a core
 without caches would see on external memory. `--lat-from-frame K` turns the
 wait states on only after K frames, so the start-up still runs at full speed,
 and `--window N` stops after N instructions with the wait states on and
-prints the cycles, CPI and wait cycles of that window:
+prints the cycles, CPI and wait cycles of that window.
+
+Pick the window with care: the attract mode shows the static title screen,
+loads the level, then plays the screen melt from the title into the demo.
+Only after that does the window measure the 3D renderer, which is what the
+game spends its time on. On `anv32im1` at full speed the title lasts until
+about frame 221 and the melt until about frame 300, so frame 350 is a safe
+start. Game time comes from `rdcycle`, so these frame numbers move with how
+fast the start-up runs; check a frame with `--png` when in doubt:
 
 ```sh
 python3 tools/run_doom_sim.py --core anv32im1 --imem-lat 20 --dmem-lat 20 \
-    --lat-from-frame 1 --window 20000000
+    --lat-from-frame 350 --window 20000000
 ```
 
 `--icache-size N` puts `anv32_icache` in front of the instruction port

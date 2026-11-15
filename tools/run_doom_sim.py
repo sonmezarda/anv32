@@ -192,7 +192,7 @@ def main() -> None:
                         help="stop after this many instructions with the wait states on")
     parser.add_argument("--icache-size", type=int, default=0,
                         help="instruction cache size in bytes (0: no cache)")
-    parser.add_argument("--icache-line", type=int, default=32, help="cache line size in bytes")
+    parser.add_argument("--icache-line", type=int, default=64, help="cache line size in bytes")
     parser.add_argument("--icache-mem-dw", type=int, choices=(32, 64), default=64,
                         help="width of a line fill beat")
     parser.add_argument("--icache-sync-tags", action="store_true",

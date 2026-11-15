@@ -27,7 +27,7 @@
 // in flight still completes.
 module anv32_icache #(
     parameter int unsigned SIZE_BYTES = 8192,
-    parameter int unsigned LINE_BYTES = 32,
+    parameter int unsigned LINE_BYTES = 64,
     parameter int unsigned MEM_DW     = 64,     // memory-side beat width: 32 or 64
     parameter bit          SYNC_TAGS  = 1'b0
 )(
