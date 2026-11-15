@@ -317,7 +317,9 @@ docs/            memory map, simulation, benchmarks, roadmap, reports
 
 Working today: the three cores, UART, I2C, the CLINT, the UART bootloader,
 the first NN accelerator, the MNIST demo, and FreeRTOS on `anv32im1`/`anv32im2` (in
-simulation and on the Tang Nano 9K). All three cores pass riscv-tests and riscv-arch-test for the
+simulation and on the Tang Nano 9K). An instruction cache and a write-through
+data cache for external memory work in simulation, where Doom runs through
+them; they are not in an FPGA build yet. All three cores pass riscv-tests and riscv-arch-test for the
 extensions they implement (RV32I/RV32IM, Zicsr and the machine-mode
 privileged suite); the only skipped tests need optional features listed under
 the limitations below. Planned next:

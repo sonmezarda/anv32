@@ -23,19 +23,29 @@
 //                       cycles before it is accepted (external memory, no
 //                       cache); with it: the first beat of a line fill comes n
 //                       cycles after the request, then one beat per cycle
-//   +dmem_lat=<n>       every data access to RAM waits n cycles
+//   +dmem_lat=<n>       without the data cache: every data access to RAM waits
+//                       n cycles; with it: the first beat of a line fill, and
+//                       the response to a write, come n cycles after the request
+//   +wr_interval=<n>    with the data cache: memory takes at most one write
+//                       every n cycles (default 1)
 //   +lat_from_frame=<k> the wait states start once k frames are out, so the
 //                       start-up can run at full speed (default 0: from reset)
 //   +window=<n>         stop after n instructions have retired with the wait
 //                       states on; cycles, CPI and wait cycles are printed
 //
 // ICACHE_SIZE != 0 puts anv32_icache with these parameters in front of the
-// instruction port.
+// instruction port, DCACHE_SIZE != 0 anv32_dcache in front of RAM on the data
+// port. With the data cache, the simulation device is only reached once every
+// buffered store is in memory, as MMIO has to wait for drained_o.
 module tb_platform #(
     parameter int unsigned ICACHE_SIZE      = 0,     // bytes; 0 = no instruction cache
     parameter int unsigned ICACHE_LINE      = 64,
     parameter int unsigned ICACHE_MEM_DW    = 64,
-    parameter bit          ICACHE_SYNC_TAGS = 1'b0
+    parameter bit          ICACHE_SYNC_TAGS = 1'b0,
+    parameter int unsigned DCACHE_SIZE      = 0,     // bytes; 0 = no data cache
+    parameter int unsigned DCACHE_LINE      = 32,
+    parameter int unsigned DCACHE_MEM_DW    = 64,
+    parameter int unsigned DCACHE_WBUF      = 4
 );
     localparam logic [31:0] RAM_BASE   = 32'h8000_0000;
     localparam int unsigned RAM_ADDR_W = 25;            // 32 MiB
@@ -108,16 +118,6 @@ module tb_platform #(
     assign instr_fire = instr_req && instr_ready;
     assign mem_fire   = mem_valid && mem_ready;
 
-    always_ff @(posedge clk) begin
-        mem_rdata <= ram_sel ? ram[mem_addr[RAM_ADDR_W-1:2]] : 32'b0;
-
-        if (mem_fire && ram_sel) begin
-            for (int i = 0; i < 4; i++) begin
-                if (mem_we[i]) ram[mem_addr[RAM_ADDR_W-1:2]][i*8 +: 8] <= mem_wdata[i*8 +: 8];
-            end
-        end
-    end
-
     function automatic logic [7:0] ram_byte(logic [31:0] addr);
         return ram[addr[RAM_ADDR_W-1:2]][addr[1:0]*8 +: 8];
     endfunction
@@ -134,20 +134,15 @@ module tb_platform #(
     // ---- Memory wait states ------------------------------------------------
     // Without a cache, a request waits *_lat cycles and is accepted on the
     // next one, like a fixed-latency memory. Only RAM data accesses wait; the
-    // simulation device answers at once.
+    // simulation device answers at once, or with the data cache once every
+    // buffered store is in memory.
     int unsigned imem_lat = 0;
     int unsigned dmem_lat = 0;
+    int unsigned wr_interval = 1;
     int unsigned lat_from_frame = 0;
-    int unsigned dpend_cycles = 0;    // cycles the current request has waited
     logic        lat_on;
 
-    assign lat_on    = frame_count >= lat_from_frame;
-    assign mem_ready = !(lat_on && mem_valid && ram_sel && dpend_cycles < dmem_lat);
-
-    always_ff @(posedge clk) begin
-        if (!mem_valid || mem_fire) dpend_cycles <= 0;
-        else                        dpend_cycles <= dpend_cycles + 1;
-    end
+    assign lat_on = frame_count >= lat_from_frame;
 
     // ---- Measurement window ------------------------------------------------
     // Counted while the wait states are on.
@@ -157,6 +152,10 @@ module tb_platform #(
     longint unsigned win_iwait = 0;   // cycles a fetch waited for memory
     longint unsigned win_dwait = 0;   // cycles a load/store waited (pipeline stalled)
     longint unsigned win_fills = 0;   // instruction cache line fills
+    longint unsigned win_dfills = 0;  // data cache line fills
+    longint unsigned win_dwrites = 0; // writes to memory from the data cache
+    longint unsigned win_swait = 0;   // cycles a store waited (with the data cache: buffer
+                                      // full, or a device store waiting for the drain)
 
     // ---- Instruction side --------------------------------------------------
     generate
@@ -236,12 +235,151 @@ module tb_platform #(
         end
     endgenerate
 
+    // ---- Data side ---------------------------------------------------------
+    generate
+        if (DCACHE_SIZE == 0) begin : g_no_dcache
+            int unsigned dpend_cycles = 0;    // cycles the current request has waited
+
+            assign mem_ready = !(lat_on && mem_valid && ram_sel && dpend_cycles < dmem_lat);
+
+            always_ff @(posedge clk) begin
+                mem_rdata <= ram_sel ? ram[mem_addr[RAM_ADDR_W-1:2]] : 32'b0;
+
+                if (mem_fire && ram_sel) begin
+                    for (int i = 0; i < 4; i++) begin
+                        if (mem_we[i]) ram[mem_addr[RAM_ADDR_W-1:2]][i*8 +: 8] <= mem_wdata[i*8 +: 8];
+                    end
+                end
+
+                if (!mem_valid || mem_fire) dpend_cycles <= 0;
+                else                        dpend_cycles <= dpend_cycles + 1;
+            end
+        end else begin : g_dcache
+            localparam int unsigned BEATS  = DCACHE_LINE * 8 / DCACHE_MEM_DW;
+            localparam int unsigned STRB_W = DCACHE_MEM_DW / 8;
+
+            logic                     dc_ready;
+            logic [31:0]              dc_rdata;
+            logic                     drained;
+            logic                     ram_q;
+            logic                     fill_req_valid;
+            logic                     fill_req_ready;
+            logic [31:0]              fill_req_addr;
+            logic                     fill_rvalid;
+            logic [DCACHE_MEM_DW-1:0] fill_rdata;
+            logic                     wr_valid;
+            logic                     wr_ready;
+            logic [31:0]              wr_addr;
+            logic [DCACHE_MEM_DW-1:0] wr_data;
+            logic [STRB_W-1:0]        wr_strb;
+            logic                     wr_done = 1'b0;
+
+            anv32_dcache #(
+                .SIZE_BYTES(DCACHE_SIZE),
+                .LINE_BYTES(DCACHE_LINE),
+                .MEM_DW    (DCACHE_MEM_DW),
+                .WBUF_DEPTH(DCACHE_WBUF)
+            ) dcache (
+                .clk_i         (clk),
+                .rst_i         (rst),
+                .invalidate_i  (1'b0),
+                .drained_o     (drained),
+                .req_valid_i   (mem_valid && ram_sel),
+                .req_addr_i    (mem_addr),
+                .req_wdata_i   (mem_wdata),
+                .req_we_i      (mem_we),
+                .req_ready_o   (dc_ready),
+                .rdata_o       (dc_rdata),
+                .mem_rd_valid_o(fill_req_valid),
+                .mem_rd_ready_i(fill_req_ready),
+                .mem_rd_addr_o (fill_req_addr),
+                .mem_rvalid_i  (fill_rvalid),
+                .mem_rdata_i   (fill_rdata),
+                .mem_wr_valid_o(wr_valid),
+                .mem_wr_ready_i(wr_ready),
+                .mem_wr_addr_o (wr_addr),
+                .mem_wr_data_o (wr_data),
+                .mem_wr_strb_o (wr_strb),
+                .mem_wr_done_i (wr_done)
+            );
+
+            // RAM goes through the cache. The device waits until every store
+            // is in memory, so a frame dump sees the whole frame.
+            assign mem_ready = ram_sel ? dc_ready : drained;
+            assign mem_rdata = ram_q ? dc_rdata : 32'b0;
+
+            always_ff @(posedge clk) ram_q <= ram_sel;
+
+            // Line fills: a request is taken when no burst is running; the
+            // first beat comes dmem_lat cycles later, then one per cycle.
+            logic        burst_active = 1'b0;
+            logic [31:0] burst_addr;
+            int unsigned beats_left;
+            int unsigned delay;
+
+            assign fill_req_ready = !burst_active;
+            assign fill_rvalid    = burst_active && delay == 0;
+
+            always_comb begin
+                for (int i = 0; i < DCACHE_MEM_DW / 32; i++)
+                    fill_rdata[i*32 +: 32] = ram[burst_addr[RAM_ADDR_W-1:2] + (RAM_ADDR_W-2)'(i)];
+            end
+
+            always_ff @(posedge clk) begin
+                if (rst) begin
+                    burst_active <= 1'b0;
+                end else if (!burst_active) begin
+                    if (fill_req_valid) begin
+                        burst_active <= 1'b1;
+                        burst_addr   <= fill_req_addr;
+                        beats_left   <= BEATS;
+                        delay        <= lat_on ? dmem_lat : 0;
+                        if (lat_on) win_dfills <= win_dfills + 1;
+                    end
+                end else if (delay != 0) begin
+                    delay <= delay - 1;
+                end else begin
+                    burst_addr <= burst_addr + 32'(DCACHE_MEM_DW / 8);
+                    beats_left <= beats_left - 1;
+                    if (beats_left == 1) burst_active <= 1'b0;
+                end
+            end
+
+            // Writes: at most one every wr_interval cycles, written to RAM
+            // when taken and answered in order dmem_lat cycles later
+            longint unsigned wr_due[$];
+            int unsigned     wr_gap = 0;
+
+            assign wr_ready = wr_valid && wr_gap == 0;
+
+            always_ff @(posedge clk) begin
+                if (wr_done) void'(wr_due.pop_front());
+                if (wr_valid && wr_ready) begin
+                    for (int i = 0; i < DCACHE_MEM_DW / 32; i++) begin
+                        for (int b = 0; b < 4; b++) begin
+                            if (wr_strb[i*4 + b])
+                                ram[wr_addr[RAM_ADDR_W-1:2] + (RAM_ADDR_W-2)'(i)][b*8 +: 8] <= wr_data[i*32 + b*8 +: 8];
+                        end
+                    end
+                    wr_due.push_back(cycle + longint'(lat_on ? dmem_lat : 0) + 1);
+                    wr_gap <= wr_interval - 1;
+                    if (lat_on) win_dwrites <= win_dwrites + 1;
+                end else if (wr_gap != 0) begin
+                    wr_gap <= wr_gap - 1;
+                end
+                // The answered write was popped above, so the next one is first
+                wr_done <= wr_due.size() != 0 && wr_due[0] <= cycle + 1;
+            end
+        end
+    endgenerate
+
     always_ff @(posedge clk) begin
         if (!rst && lat_on) begin
             win_cycles  <= win_cycles + 1;
             win_instret <= win_instret + 64'(dut.csr.retire_i);
             win_iwait   <= win_iwait + 64'(instr_req && !instr_ready);
             win_dwait   <= win_dwait + 64'(mem_valid && !mem_ready);
+            win_swait   <= win_swait + 64'(mem_valid && mem_we != 4'b0 && !mem_ready);
         end
     end
 
@@ -293,6 +431,8 @@ module tb_platform #(
         void'($value$plusargs("max_frames=%d", max_frames));
         void'($value$plusargs("imem_lat=%d", imem_lat));
         void'($value$plusargs("dmem_lat=%d", dmem_lat));
+        void'($value$plusargs("wr_interval=%d", wr_interval));
+        if (wr_interval == 0) wr_interval = 1;
         void'($value$plusargs("lat_from_frame=%d", lat_from_frame));
         void'($value$plusargs("window=%d", window));
 
@@ -311,6 +451,11 @@ module tb_platform #(
             $display("[platform] icache %0d B, %0d B lines, %0d-bit fills, %s tags: %0d line fills, %0.2f per 1000 instructions",
                      ICACHE_SIZE, ICACHE_LINE, ICACHE_MEM_DW, ICACHE_SYNC_TAGS ? "sync" : "async",
                      win_fills, 1000.0 * real'(win_fills) / real'(win_instret));
+        if (win_instret != 0 && DCACHE_SIZE != 0)
+            $display("[platform] dcache %0d B, %0d B lines, %0d-entry write buffer: %0d line fills and %0d writes, %0.2f and %0.2f per 1000 instructions; stores waited %0d cycles",
+                     DCACHE_SIZE, DCACHE_LINE, DCACHE_WBUF, win_dfills, win_dwrites,
+                     1000.0 * real'(win_dfills) / real'(win_instret),
+                     1000.0 * real'(win_dwrites) / real'(win_instret), win_swait);
         if (window != 0 && win_instret >= window)
             $display("[platform] window done after %0d cycles", cycle);
         else if (max_frames != 0 && frame_count >= max_frames)

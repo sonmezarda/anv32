@@ -17,8 +17,11 @@ what comes next.
 - A UART bootloader in the top 1 KiB of the BRAM loads programs without a new
   bitstream; a hardware trigger on the RX pin resets the SoC into it.
 - Doom (doomgeneric, shareware) runs on `anv32im1` and `anv32im2` in
-  simulation with single-cycle memory. Running it on the PYNQ-Z2 needs
-  caches, DDR access over AXI and a video output.
+  simulation. With the instruction and data caches (`rtl/cache`) in front of
+  a memory 20 cycles away, gameplay runs at about 1.6 CPI on `anv32im1` and
+  1.75 on `anv32im2`, against 1.33 and 1.51 with single-cycle memory and
+  about 31 without caches. Running it on the PYNQ-Z2 needs DDR access over
+  AXI and a video output.
 
 ## anv32i1 is frozen
 

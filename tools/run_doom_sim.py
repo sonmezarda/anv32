@@ -146,22 +146,27 @@ def build_image(args, repo: Path, dg: Path, picolibc: Path, wad: Path, out: Path
 
 
 def build_sim(args, repo: Path, out: Path) -> Path:
-    # One build per core and instruction cache configuration
+    # One build per core and cache configuration
     cache = []
-    mdir = out / f"obj_{args.core}"
+    name = f"obj_{args.core}"
     if args.icache_size:
-        cache = [f"-GICACHE_SIZE={args.icache_size}", f"-GICACHE_LINE={args.icache_line}",
-                 f"-GICACHE_MEM_DW={args.icache_mem_dw}",
-                 f"-GICACHE_SYNC_TAGS={int(args.icache_sync_tags)}"]
-        mdir = out / (f"obj_{args.core}_ic{args.icache_size}_{args.icache_line}"
-                      f"_{args.icache_mem_dw}{'_sync' if args.icache_sync_tags else ''}")
+        cache += [f"-GICACHE_SIZE={args.icache_size}", f"-GICACHE_LINE={args.icache_line}",
+                  f"-GICACHE_MEM_DW={args.icache_mem_dw}",
+                  f"-GICACHE_SYNC_TAGS={int(args.icache_sync_tags)}"]
+        name += (f"_ic{args.icache_size}_{args.icache_line}_{args.icache_mem_dw}"
+                 f"{'_sync' if args.icache_sync_tags else ''}")
+    if args.dcache_size:
+        cache += [f"-GDCACHE_SIZE={args.dcache_size}", f"-GDCACHE_LINE={args.dcache_line}",
+                  f"-GDCACHE_MEM_DW={args.dcache_mem_dw}", f"-GDCACHE_WBUF={args.dcache_wbuf}"]
+        name += f"_dc{args.dcache_size}_{args.dcache_line}_{args.dcache_mem_dw}_wb{args.dcache_wbuf}"
+    mdir = out / name
     cmd = [
         args.verilator, "-sv", "--binary", "--timing", "-Wall", "-Wno-fatal",
         *run_core_tests.QUIET_WARNINGS,
         "-O3", "--x-assign", "fast", "--x-initial", "fast", "-CFLAGS", "-O2",
         "-Mdir", mdir, "--top-module", "tb_platform", f"-D{CORE_DEFINES[args.core]}", *cache,
         *run_core_tests.CORE_SOURCES[args.core], "rtl/cache/anv32_icache.sv",
-        "sim/tb/common/tb_platform.sv",
+        "rtl/cache/anv32_dcache.sv", "sim/tb/common/tb_platform.sv",
     ]
     if args.verbose:
         run(cmd, cwd=repo, verbose=True)
@@ -197,6 +202,14 @@ def main() -> None:
                         help="width of a line fill beat")
     parser.add_argument("--icache-sync-tags", action="store_true",
                         help="tags in block RAM: one wait state on every hit")
+    parser.add_argument("--dcache-size", type=int, default=0,
+                        help="data cache size in bytes (0: no cache)")
+    parser.add_argument("--dcache-line", type=int, default=32, help="cache line size in bytes")
+    parser.add_argument("--dcache-mem-dw", type=int, choices=(32, 64), default=64,
+                        help="width of a line fill and write beat")
+    parser.add_argument("--dcache-wbuf", type=int, default=4, help="write buffer entries")
+    parser.add_argument("--wr-interval", type=int, default=1,
+                        help="with the data cache: memory takes one write every N cycles")
     parser.add_argument("--png", default="", help="frame numbers to save as PNG")
     parser.add_argument("--video", type=Path, help="write the frames as .mp4 or .gif")
     parser.add_argument("--out-dir", type=Path, default=Path("build/doom"))
@@ -226,7 +239,7 @@ def main() -> None:
     cmd = [sim, f"+prog={hex_file}", f"+max_cycles={args.max_cycles}", f"+frames={frames}"]
     if args.max_frames:
         cmd.append(f"+max_frames={args.max_frames}")
-    for name in ("imem_lat", "dmem_lat", "lat_from_frame", "window"):
+    for name in ("imem_lat", "dmem_lat", "wr_interval", "lat_from_frame", "window"):
         if getattr(args, name):
             cmd.append(f"+{name}={getattr(args, name)}")
     print(f"running Doom on {args.core}; console output in {log}")

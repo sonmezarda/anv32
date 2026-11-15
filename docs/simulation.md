@@ -257,7 +257,12 @@ python3 tools/run_doom_sim.py --core anv32im1 --imem-lat 20 --dmem-lat 20 \
 `--icache-size N` puts `anv32_icache` in front of the instruction port
 (`--icache-line`, `--icache-mem-dw` and `--icache-sync-tags` set the rest). Line
 fills then come from a burst memory: the first beat `--imem-lat` cycles after
-the request, then one beat per cycle. Each cache configuration gets its own
+the request, then one beat per cycle. `--dcache-size N` puts `anv32_dcache` in
+front of RAM on the data port (`--dcache-line`, `--dcache-mem-dw`,
+`--dcache-wbuf`): its line fills take `--dmem-lat` cycles to the first beat,
+memory takes one write every `--wr-interval` cycles and answers it
+`--dmem-lat` cycles later, and the simulation device is only reached once
+every buffered store is in memory. Each cache configuration gets its own
 simulator build.
 
 ## Benchmarks
